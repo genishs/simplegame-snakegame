@@ -4,6 +4,35 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.3 — 2026-05-19
+
+**Theme:** the game starts to look like itself — 아기자기 (cute, cozy) graphic identity, first pass.
+
+### What
+- Replaced the red square food with a hand-drawn apple (red body, green leaf, gloss highlight, brown stem). All canvas-primitives, no external assets.
+- Replaced the green square snake with rounded sage-green segments. The head is one shade richer and carries two eyes that rotate to face the direction of travel.
+- Added a soft idle wobble to the apple (±1.5px sine, 1.2s period) so the board is never visually static.
+- Added a 150 ms "eat pulse" — the head briefly scales to 110% when the snake lands on the apple.
+- Introduced `requestAnimationFrame` so animation runs at display refresh while game logic still ticks at 110 ms. The two are now decoupled.
+- Re-skinned the page chrome: warm cream background, soft butter board, warm-orange accent on the title. Overlay card matches the palette.
+- New `docs/design/STYLE.md` — single source of truth for every color, radius, and motion value used in this version.
+
+### Why
+v0.2 proved the pipeline worked but the game looked like a programmer's first canvas test. The user set the brand: **아기자기** (cute, cozy). v0.3 is the first version that actually delivers that promise, and it does so without changing any gameplay rule, so the change is purely about how the game *feels* to look at.
+
+### Decisions worth recording
+- Canvas-drawn apple over inline SVG: keeps the rendering path uniform, no DOM nodes overlapping the canvas, easier to animate per-frame in `drawApple(now)`.
+- Tokens mirrored in JS (`TOKEN = {...}`) instead of read from CSS via `getComputedStyle`. Canvas drawing is hot path; the mirror is a one-line edit if a value changes and `STYLE.md` documents the authoritative source.
+- Decoupled animation tick from game tick — the apple wobble would have looked janky if it only redrew every 110 ms.
+- 180° turn-in-one-tick robustness still deferred. The bug exists from v0.1; it's rare in normal play, and addressing it now would expand the scope past visuals-only.
+
+### Verification
+- Manual play-through in browser: start, eat (head pulses), pause, game over, restart. All paths preserved.
+- Visual: apple wobble visible at idle; eyes rotate when changing direction; segments have rounded corners.
+- Payload: total still under the 50 KB budget.
+
+---
+
 ## v0.2 — 2026-05-19
 
 **Theme:** verification.
