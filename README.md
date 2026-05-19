@@ -37,6 +37,7 @@ Open the live site and press **Space** to start.
 |---|---|
 | ↑ ↓ ← → / W A S D | Move the snake |
 | Space | Start / Pause / Restart |
+| Esc | Skip tutorial (only on the tutorial stage) |
 
 Reverse-direction input within a single tick is ignored to prevent instant self-collision.
 
@@ -92,8 +93,9 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.1 | Initial canvas game + Pages deploy | ✅ |
 | v0.2 | Deployment + play-through verified | ✅ |
 | v0.3 | Cute snake graphic eating an apple | ✅ |
-| v0.4 | 5×5 tutorial stage, first "Stage" concept | 🛠 in progress |
-| v0.5+ | TBD — see `docs/specs/` once drafted | — |
+| v0.4 | 5×5 tutorial stage, first "Stage" concept | ✅ |
+| v0.5 | Tutorial: slower, non-punishing, skippable | 🛠 in progress |
+| v0.6+ | TBD — see `docs/specs/` once drafted | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 
 See `HISTORY.md` for the full ledger.

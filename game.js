@@ -30,14 +30,15 @@ const TOKEN = {
 };
 
 const STAGES = [
-  { id: "tutorial", label: "Tutorial", cols: 5, rows: 5, tick: 200, snakeLen: 2, clearAfterApples: 3 },
-  { id: 1,          label: "Stage 1",  cols: 20, rows: 20, tick: 110, snakeLen: 3, clearAfterApples: null },
+  { id: "tutorial", label: "Tutorial", cols: 5, rows: 5, tick: 350, snakeLen: 2, clearAfterApples: 3, noFailOnHit: true },
+  { id: 1,          label: "Stage 1",  cols: 20, rows: 20, tick: 110, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
 ];
 
 const STATE = {
   READY: "ready",
   PLAYING: "playing",
   PAUSED: "paused",
+  BLOCKED: "blocked",
   STAGE_CLEAR: "stage_clear",
   OVER: "over",
 };
@@ -151,14 +152,29 @@ function advanceStage() {
   hideOverlay();
 }
 
+function wouldHit(head) {
+  if (head.x < 0 || head.x >= stage.cols || head.y < 0 || head.y >= stage.rows) return true;
+  // exclude tail tip — it will move out of the way unless the snake is also growing
+  return snake.some((s, i) => i < snake.length - 1 && s.x === head.x && s.y === head.y);
+}
+
+function isSafeDir(dx, dy) {
+  if (dx === -dir.x && dy === -dir.y) return false;
+  const probe = { x: snake[0].x + dx, y: snake[0].y + dy };
+  return !wouldHit(probe);
+}
+
+function enterBlocked() {
+  state = STATE.BLOCKED;
+  showOverlay("잠깐!", "다른 방향을 눌러주세요  ↑ ↓ ← →");
+}
+
 function tick() {
   dir = nextDir;
   const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
 
-  if (head.x < 0 || head.x >= stage.cols || head.y < 0 || head.y >= stage.rows) {
-    return gameOver();
-  }
-  if (snake.some((s, i) => i < snake.length - 1 && s.x === head.x && s.y === head.y)) {
+  if (wouldHit(head)) {
+    if (stage.noFailOnHit) return enterBlocked();
     return gameOver();
   }
 
@@ -351,20 +367,47 @@ function setDirection(dx, dy) {
   nextDir = { x: dx, y: dy };
 }
 
+function tryUnblock(dx, dy) {
+  if (!isSafeDir(dx, dy)) return;
+  dir = { x: dx, y: dy };
+  nextDir = dir;
+  state = STATE.PLAYING;
+  tickAccum = 0;
+  hideOverlay();
+}
+
+function dirFromKey(key) {
+  switch (key) {
+    case "ArrowUp": case "w": case "W": return { x: 0, y: -1 };
+    case "ArrowDown": case "s": case "S": return { x: 0, y: 1 };
+    case "ArrowLeft": case "a": case "A": return { x: -1, y: 0 };
+    case "ArrowRight": case "d": case "D": return { x: 1, y: 0 };
+    default: return null;
+  }
+}
+
 document.addEventListener("keydown", (e) => {
   const key = e.key;
   if (key === " " || key === "Spacebar") {
     e.preventDefault();
     if (state === STATE.PLAYING) pause();
+    else if (state === STATE.BLOCKED) { /* Space is inert while blocked */ }
     else if (state !== STATE.STAGE_CLEAR) start();
     return;
   }
-  if (state !== STATE.PLAYING) return;
-  switch (key) {
-    case "ArrowUp": case "w": case "W": setDirection(0, -1); break;
-    case "ArrowDown": case "s": case "S": setDirection(0, 1); break;
-    case "ArrowLeft": case "a": case "A": setDirection(-1, 0); break;
-    case "ArrowRight": case "d": case "D": setDirection(1, 0); break;
+  if (key === "Escape" || key === "Esc") {
+    e.preventDefault();
+    if (state === STATE.PLAYING || state === STATE.BLOCKED) {
+      if (stage.id === "tutorial") advanceStage();
+    }
+    return;
+  }
+  const d = dirFromKey(key);
+  if (!d) return;
+  if (state === STATE.PLAYING) {
+    setDirection(d.x, d.y);
+  } else if (state === STATE.BLOCKED) {
+    tryUnblock(d.x, d.y);
   }
 });
 
