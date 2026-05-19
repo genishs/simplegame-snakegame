@@ -24,6 +24,8 @@ Calm. Friendly. A little bit warm. Not aggressive, not arcadey. Pastel over satu
 | `--apple-highlight` | `rgba(255, 255, 255, 0.55)` | Apple gloss |
 | `--apple-leaf` | `#7ac74f` | Apple leaf (slightly brighter green) |
 | `--apple-stem` | `#5d3a1c` | Apple stem (warm brown) |
+| `--mask-outside` | `rgba(120, 90, 60, 0.18)` | Area outside the active stage (tutorial spotlight) |
+| `--stage-label` | `#8a7460` | "Stage: ..." HUD label color |
 
 ## Geometry tokens
 
@@ -62,6 +64,10 @@ The whole apple sits inside the cell with ~1px padding so it reads as a friendly
 - **Idle apple wobble:** the apple's center y oscillates by `--wobble-amp` over `--wobble-period` using a sine curve. Continuous, never resets between frames.
 - **Eat pulse:** when the snake's head lands on the apple, the head segment scales up to `--eat-pulse-scale` over half the duration, then back to 1.0 over the other half (ease-in-out). The body does not pulse.
 - **Background:** static. No motion. Cozy means calm — the board itself should not move.
+
+## Stage spotlight (v0.4+)
+
+When the active stage uses a smaller logical grid than the canvas (tutorial = 5×5 on a 20-cell canvas), the inactive cells are dimmed with `--mask-outside` so the active play area visually pops without changing canvas dimensions. The active area still uses `--bg-board`; the mask is a single overlay rectangle drawn AFTER the background and BEFORE the grid lines of the active area, so grid lines exist only inside the active area.
 
 ## What this version intentionally does NOT include
 

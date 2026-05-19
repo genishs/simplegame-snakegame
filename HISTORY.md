@@ -4,6 +4,42 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.4 — 2026-05-20
+
+**Theme:** the game gains a sense of *progression*. First "stage" enters the model.
+
+### What
+- New `STAGES` data structure with two entries:
+  - **Tutorial:** 5×5 grid, 200ms tick, snake length 2, clears after eating 3 apples
+  - **Stage 1:** 20×20 grid, 110ms tick, snake length 3 (the previous default)
+- Game now starts on the tutorial stage. After clearing, a brief "튜토리얼 클리어!" message holds for 800ms, then the game transitions to Stage 1. Score persists across the transition.
+- HUD gains a "Stage: ..." label alongside Score and Best.
+- Canvas pixel area unchanged (400×400). When a stage is smaller than the canvas, the active area is centered and the surrounding cells are masked with a low-opacity warm tone — a spotlight effect, no DOM change, no canvas resize.
+- Grid lines now only draw inside the active stage area.
+- New design tokens: `--mask-outside` for the spotlight surround, `--stage-label` for the HUD label.
+- Game-over → restart returns to the tutorial stage (intentional — the tutorial is short and forgiving).
+
+### Why
+The game promised "아기자기" — but a single endless 20×20 board doesn't feel inviting to a first-time player. A small, slow tutorial gives a new player room to learn the controls before being asked to make decisions on a larger board. It also lets us introduce the *concept* of stages now, so later difficulty work can plug into the same data shape without a refactor.
+
+This version satisfies the standing rule that **stages 1–3 must feel very easy** — the tutorial is intentionally even easier than Stage 1, and Stage 1 remains the same forgiving speed it has been since v0.1.
+
+### Decisions worth recording
+- **Stages as data, not control flow.** `STAGES[]` is an array of plain config; transitioning is just `stageIndex += 1; loadStage(...)`. Future difficulty curves slot into the same array.
+- **Spotlight via overlay rectangles, not canvas resize.** Resizing the canvas would have forced layout shifts and broken existing draw helpers; an overlay mask preserves all geometry and just dims the inactive cells.
+- **Stage transition timed against `performance.now()`, not `setTimeout`.** Keeps everything inside the existing RAF loop — no stray timers to clean up on pause/restart.
+- **Restart returns to tutorial** rather than to the stage where you died. The tutorial is so short that this is more friendly than punishing.
+
+### Verification
+- Tutorial board renders centered with the spotlight surround.
+- Eating 3 apples in the tutorial triggers the clear message; after ~0.8s the board expands to 20×20 and the snake resets cleanly.
+- Score from the tutorial carries over (e.g. 30 from the tutorial → starts Stage 1 at 30).
+- Direction reset works on stage transition (head moves rightward at the new board's center).
+- HUD shows "Tutorial" or "Stage 1" in real time.
+- Visual identity from v0.3 (cute snake + apple, eat pulse, wobble) preserved on both stages.
+
+---
+
 ## v0.3 — 2026-05-19
 
 **Theme:** the game starts to look like itself — 아기자기 (cute, cozy) graphic identity, first pass.

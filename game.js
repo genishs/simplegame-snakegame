@@ -2,18 +2,19 @@ const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
 const bestEl = document.getElementById("best");
+const stageEl = document.getElementById("stage");
 const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlay-title");
 const overlayMsg = document.getElementById("overlay-msg");
 
 const CELL = 20;
-const COLS = canvas.width / CELL;
-const ROWS = canvas.height / CELL;
-const TICK_MS = 110;
+const CANVAS_W = canvas.width;
+const CANVAS_H = canvas.height;
 
 const TOKEN = {
   bgBoard: "#fff4dc",
   gridLine: "rgba(120, 90, 60, 0.06)",
+  maskOutside: "rgba(120, 90, 60, 0.18)",
   snakeBody: "#7cc47c",
   snakeHead: "#6bb96b",
   snakeShadow: "rgba(60, 100, 60, 0.18)",
@@ -28,32 +29,64 @@ const TOKEN = {
   eatPulseScale: 1.10,
 };
 
-const STATE = { READY: "ready", PLAYING: "playing", PAUSED: "paused", OVER: "over" };
+const STAGES = [
+  { id: "tutorial", label: "Tutorial", cols: 5, rows: 5, tick: 200, snakeLen: 2, clearAfterApples: 3 },
+  { id: 1,          label: "Stage 1",  cols: 20, rows: 20, tick: 110, snakeLen: 3, clearAfterApples: null },
+];
 
+const STATE = {
+  READY: "ready",
+  PLAYING: "playing",
+  PAUSED: "paused",
+  STAGE_CLEAR: "stage_clear",
+  OVER: "over",
+};
+
+const STAGE_CLEAR_HOLD_MS = 800;
+
+let stageIndex;
+let stage;
 let snake, dir, nextDir, food, score, best, state;
+let applesEaten;
 let tickAccum = 0;
 let lastFrame = 0;
 let eatStart = -Infinity;
+let stageClearAt = 0;
 
 function init() {
-  snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
-  dir = { x: 1, y: 0 };
-  nextDir = dir;
+  stageIndex = 0;
   score = 0;
   best = Number(localStorage.getItem("snake-best") || 0);
+  applesEaten = 0;
   state = STATE.READY;
   tickAccum = 0;
   eatStart = -Infinity;
-  placeFood();
+  loadStage(stageIndex);
   updateHud();
   showOverlay("Press Space to Start", "Arrow keys or WASD to move");
+}
+
+function loadStage(idx) {
+  stage = STAGES[idx];
+  applesEaten = 0;
+  const startX = Math.floor(stage.cols / 2) - Math.floor(stage.snakeLen / 2);
+  const startY = Math.floor(stage.rows / 2);
+  snake = [];
+  for (let i = 0; i < stage.snakeLen; i++) {
+    snake.push({ x: startX + (stage.snakeLen - 1 - i), y: startY });
+  }
+  dir = { x: 1, y: 0 };
+  nextDir = dir;
+  tickAccum = 0;
+  placeFood();
+  updateHud();
 }
 
 function placeFood() {
   while (true) {
     const f = {
-      x: Math.floor(Math.random() * COLS),
-      y: Math.floor(Math.random() * ROWS),
+      x: Math.floor(Math.random() * stage.cols),
+      y: Math.floor(Math.random() * stage.rows),
     };
     if (!snake.some((s) => s.x === f.x && s.y === f.y)) {
       food = f;
@@ -65,6 +98,7 @@ function placeFood() {
 function updateHud() {
   scoreEl.textContent = score;
   bestEl.textContent = best;
+  stageEl.textContent = stage.label;
 }
 
 function showOverlay(title, msg) {
@@ -100,11 +134,30 @@ function gameOver() {
   showOverlay("Game Over", `Score: ${score} · Press Space to restart`);
 }
 
+function enterStageClear() {
+  state = STATE.STAGE_CLEAR;
+  stageClearAt = performance.now();
+  showOverlay("튜토리얼 클리어!", "곧 Stage 1으로 이동합니다");
+}
+
+function advanceStage() {
+  stageIndex += 1;
+  if (stageIndex >= STAGES.length) {
+    // No more stages defined; stay on the last stage as endless mode
+    stageIndex = STAGES.length - 1;
+  }
+  loadStage(stageIndex);
+  state = STATE.PLAYING;
+  hideOverlay();
+}
+
 function tick() {
   dir = nextDir;
   const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
 
-  if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) return gameOver();
+  if (head.x < 0 || head.x >= stage.cols || head.y < 0 || head.y >= stage.rows) {
+    return gameOver();
+  }
   if (snake.some((s, i) => i < snake.length - 1 && s.x === head.x && s.y === head.y)) {
     return gameOver();
   }
@@ -112,29 +165,59 @@ function tick() {
   snake.unshift(head);
   if (head.x === food.x && head.y === food.y) {
     score += 10;
+    applesEaten += 1;
     updateHud();
     eatStart = performance.now();
+    if (stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
+      return enterStageClear();
+    }
     placeFood();
   } else {
     snake.pop();
   }
 }
 
+function getStageOffset() {
+  return {
+    x: (CANVAS_W - stage.cols * CELL) / 2,
+    y: (CANVAS_H - stage.rows * CELL) / 2,
+  };
+}
+
 function drawBackground() {
   ctx.fillStyle = TOKEN.bgBoard;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const off = getStageOffset();
+  const w = stage.cols * CELL;
+  const h = stage.rows * CELL;
+
+  // mask outside the active stage area (if stage is smaller than canvas)
+  if (off.x > 0 || off.y > 0) {
+    ctx.fillStyle = TOKEN.maskOutside;
+    // top
+    if (off.y > 0) ctx.fillRect(0, 0, CANVAS_W, off.y);
+    // bottom
+    if (off.y > 0) ctx.fillRect(0, off.y + h, CANVAS_W, CANVAS_H - (off.y + h));
+    // left
+    if (off.x > 0) ctx.fillRect(0, off.y, off.x, h);
+    // right
+    if (off.x > 0) ctx.fillRect(off.x + w, off.y, CANVAS_W - (off.x + w), h);
+  }
+
+  // grid lines inside active area only
   ctx.strokeStyle = TOKEN.gridLine;
   ctx.lineWidth = 1;
-  for (let i = 1; i < COLS; i++) {
+  for (let i = 1; i < stage.cols; i++) {
     ctx.beginPath();
-    ctx.moveTo(i * CELL + 0.5, 0);
-    ctx.lineTo(i * CELL + 0.5, canvas.height);
+    ctx.moveTo(off.x + i * CELL + 0.5, off.y);
+    ctx.lineTo(off.x + i * CELL + 0.5, off.y + h);
     ctx.stroke();
   }
-  for (let j = 1; j < ROWS; j++) {
+  for (let j = 1; j < stage.rows; j++) {
     ctx.beginPath();
-    ctx.moveTo(0, j * CELL + 0.5);
-    ctx.lineTo(canvas.width, j * CELL + 0.5);
+    ctx.moveTo(off.x, off.y + j * CELL + 0.5);
+    ctx.lineTo(off.x + w, off.y + j * CELL + 0.5);
     ctx.stroke();
   }
 }
@@ -150,8 +233,9 @@ function roundedRect(x, y, w, h, r) {
 }
 
 function drawSegment(cellX, cellY) {
-  const px = cellX * CELL + 1.5;
-  const py = cellY * CELL + 1.5;
+  const off = getStageOffset();
+  const px = off.x + cellX * CELL + 1.5;
+  const py = off.y + cellY * CELL + 1.5;
   const size = CELL - 3;
   ctx.fillStyle = TOKEN.snakeBody;
   roundedRect(px, py, size, size, TOKEN.radiusCell);
@@ -170,10 +254,11 @@ function drawSnakeHead(cellX, cellY, direction, now) {
     scale = 1 + (TOKEN.eatPulseScale - 1) * tri;
   }
 
+  const off = getStageOffset();
   const baseSize = CELL - 3;
   const size = baseSize * scale;
-  const cx = cellX * CELL + CELL / 2;
-  const cy = cellY * CELL + CELL / 2;
+  const cx = off.x + cellX * CELL + CELL / 2;
+  const cy = off.y + cellY * CELL + CELL / 2;
   const px = cx - size / 2;
   const py = cy - size / 2;
 
@@ -181,7 +266,6 @@ function drawSnakeHead(cellX, cellY, direction, now) {
   roundedRect(px, py, size, size, TOKEN.radiusCell);
   ctx.fill();
 
-  // eyes — placed on the leading face per direction
   const eyeOffset = size * 0.22;
   const eyeForward = size * 0.28;
   let e1x, e1y, e2x, e2y;
@@ -209,28 +293,25 @@ function drawSnakeHead(cellX, cellY, direction, now) {
 }
 
 function drawApple(cellX, cellY, now) {
+  const off = getStageOffset();
   const wobble = Math.sin((now / TOKEN.wobblePeriod) * Math.PI * 2) * TOKEN.wobbleAmp;
-  const cx = cellX * CELL + CELL / 2;
-  const cy = cellY * CELL + CELL / 2 + wobble;
+  const cx = off.x + cellX * CELL + CELL / 2;
+  const cy = off.y + cellY * CELL + CELL / 2 + wobble;
   const r = CELL * 0.42;
 
-  // stem
   ctx.fillStyle = TOKEN.appleStem;
   ctx.fillRect(cx - 0.75, cy - r - 2, 1.5, 3);
 
-  // leaf
   ctx.fillStyle = TOKEN.appleLeaf;
   ctx.beginPath();
   ctx.ellipse(cx + 3, cy - r - 0.5, 3, 1.8, -0.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // body
   ctx.fillStyle = TOKEN.appleBody;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // highlight
   ctx.fillStyle = TOKEN.appleHighlight;
   ctx.beginPath();
   ctx.ellipse(cx - r * 0.35, cy - r * 0.35, r * 0.28, r * 0.18, -0.5, 0, Math.PI * 2);
@@ -250,12 +331,17 @@ function frame(now) {
 
   if (state === STATE.PLAYING) {
     tickAccum += dt;
-    while (tickAccum >= TICK_MS) {
+    while (tickAccum >= stage.tick) {
       tick();
-      tickAccum -= TICK_MS;
+      tickAccum -= stage.tick;
       if (state !== STATE.PLAYING) break;
     }
+  } else if (state === STATE.STAGE_CLEAR) {
+    if (now - stageClearAt >= STAGE_CLEAR_HOLD_MS) {
+      advanceStage();
+    }
   }
+
   draw(now);
   requestAnimationFrame(frame);
 }
@@ -270,7 +356,7 @@ document.addEventListener("keydown", (e) => {
   if (key === " " || key === "Spacebar") {
     e.preventDefault();
     if (state === STATE.PLAYING) pause();
-    else start();
+    else if (state !== STATE.STAGE_CLEAR) start();
     return;
   }
   if (state !== STATE.PLAYING) return;
