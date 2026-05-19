@@ -4,6 +4,39 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5 — 2026-05-20
+
+**Theme:** the tutorial actually teaches.
+
+### What
+- Tutorial tick slowed from 200ms to **350ms** (75% slower).
+- New `noFailOnHit` flag on stage data; the tutorial is the only stage that has it.
+- New `STATE.BLOCKED`: when a tutorial move would hit a wall or self, the move is cancelled, the snake stops, and an overlay reads "잠깐! 다른 방향을 눌러주세요  ↑ ↓ ← →".
+- BLOCKED is exited by pressing a *safe* direction key. Unsafe direction (reverse or still-colliding) keeps BLOCKED. Space is inert in BLOCKED.
+- **Tutorial skip:** `Esc` while on the tutorial jumps straight to Stage 1 (preserves score, no clear message).
+- Updated controls hint to mention Esc; README controls table updated.
+
+### Why
+v0.4 shipped the tutorial structure but the tutorial was finishing in under 10 seconds and a single misstep dropped the player back to the start. That defeats the entire reason for having a tutorial in the first place. The fix: slow it down enough to *read* the board, and never punish — only nudge.
+
+Skip was added because experienced players (anyone replaying) shouldn't be forced through the tutorial every time. The first run leaves the tutorial as the only path; from the second run onward, Esc gives an out.
+
+### Decisions worth recording
+- **`noFailOnHit` is per-stage, not a global mode.** Stage 1+ still ends on collision; the actual game is unchanged.
+- **`wouldHit()` is the single source of truth** for collision pre-check (both `tick()` and `isSafeDir()` use it). Eliminates the risk of these two paths drifting.
+- **`isSafeDir()` excludes the reverse direction** so reversing a 1-cell snake doesn't appear "safe". Mirrors the existing 180°-turn gate in `setDirection()`.
+- **BLOCKED resets `tickAccum`** on unblock so the next tick fires after a full interval, not immediately. Otherwise the snake snaps a step the instant the player presses a key, which feels twitchy.
+- **Skip doesn't run STAGE_CLEAR's 800ms hold.** When you choose to skip, the friendly delay is the opposite of what you want.
+
+### Verification
+- Walking the snake into a wall in tutorial: snake stops, hint appears, picking a safe direction resumes play.
+- Walking into self (would require longer snake): same behavior.
+- Skip via Esc from tutorial jumps to Stage 1, tutorial score preserved.
+- Stage 1 wall hit: still triggers game over (unchanged).
+- Reverse direction key in BLOCKED is rejected (stays BLOCKED).
+
+---
+
 ## v0.4 — 2026-05-20
 
 **Theme:** the game gains a sense of *progression*. First "stage" enters the model.
