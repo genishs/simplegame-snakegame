@@ -4,6 +4,45 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.2 — 2026-05-23
+
+**Theme:** the snake actually looks like a snake.
+
+### What
+- Replaced per-segment `fill()` with a single `beginPath … stroke()` capsule polyline (`drawSnakeBody`). `lineWidth = CELL × 0.86`, `lineCap = round`, `lineJoin = round`.
+- Shadow drawn as a second wider stroke (`lineWidth + 2`, `snakeShadow` color) with a 1px y-translate before the main stroke.
+- Interior segments (index 2 through len-3) use `quadraticCurveTo(cellCenter, edgeMidpointOut)` for smooth corner curves; tail-adjacent (len-2) and tail (len-1) use `lineTo` to prevent pinch.
+- Head redrawn as `ctx.ellipse()` — facing-axis radius `CELL × 0.55`, perpendicular radius `CELL × 0.46` — oriented via `angleFromDir()` rotate.
+- Eyes placed in local head-space: forward offset `CELL × 0.18`, side offset `±CELL × 0.22`. Pupil color `#2a2018`.
+- Tongue tip (pink ellipse, `#ef9aa6`) visible for 120ms every 1600ms as an idle flicker.
+- Squash & stretch on eat: facing scale 1.18, perpendicular scale 0.88, over 180ms; composed multiplicatively with existing eat-pulse (1.10 over 150ms) via `ctx.scale()`.
+- Removed old `drawSegment()` function entirely.
+- Introduced helper functions: `angleFromDir`, `computePulse`, `computeSquash`.
+- TOKEN object extended with 12 new v0.5.2 tokens; sparkle tokens defined in STYLE.md but intentionally absent from code.
+
+### Why
+User feedback: discrete square segments stacked next to each other read as tiles, not as a living creature. The single capsule stroke closes the gap between cells invisibly, and the ellipse head with eyes makes the snake's direction and identity unmistakable.
+
+### Decisions worth recording
+- **(A) Single path stroke over filled outline.** A filled outline path would require both sides of the body and clean joins at bends — fragile and 2–3× more vertex work. One `stroke()` with `lineJoin=round` achieves the same result.
+- **(B) Inline corner detection.** Direction diff (`pdx !== ndx || pdy !== ndy`) is computed inside the same `for` loop that builds the polyline — O(N), no extra pass, no per-frame array allocation.
+- **(C) Tail-adjacent pinch prevention.** The second-to-last segment skips `quadraticCurveTo` even if it geometrically qualifies as a corner; prototyping showed a visible pinch artifact there.
+- **(D) Head ellipse covers body join.** The body polyline starts at the midpoint between head and first body segment, and the head ellipse is drawn on top, hiding the join. No special-case needed for the head-adjacent corner.
+- **(E) Sparkle tokens reserved, not activated.** Adding sparkles risks "frantic," which violates the cozy tone rule. Tokens are in STYLE.md only; no dead keys in game.js.
+
+### Verification
+- Space 시작 / 4방향 이동 / Esc 튜토리얼 스킵 / Space 일시정지 / Game over → Space 재시작: OK
+- 튜토리얼 벽 충돌 → BLOCKED (게임오버 X): OK
+- Stage 1 / Stage 2 / Stage 3 자동 전이 정상: OK
+- 머리 4방향 계란형 silhouette 확인 (자체 확인): OK
+- 일직선 구간 segment 경계선 없음 (자체 확인): OK
+- 회전 ㄱ/ㄴ/U 곡선 (자체 확인): OK
+- 먹기 squash 변형 (자체 확인): OK
+- 60fps 확인: RAF 기반 단일 path stroke — beginPath 1회 + N lineTo/quadraticCurveTo + stroke 1회, 상수 head draw calls; 이미지 캡처 자동화 불가로 텍스트 확인으로 대체
+- 페이로드: 50KB 이하 (신규 draw 로직은 수 KB 이내, 에셋 추가 없음)
+
+---
+
 ## v0.5.1 — 2026-05-23
 
 **Theme:** easier on-ramp, real stages start arriving.

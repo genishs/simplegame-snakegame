@@ -27,6 +27,23 @@ const TOKEN = {
   wobbleAmp: 1.5,
   eatPulseDur: 150,
   eatPulseScale: 1.10,
+  // v0.5.2 eat squash tokens
+  eatSquashX: 1.18,
+  eatSquashY: 0.88,
+  eatSquashDur: 180,
+  // v0.5.2 head geometry tokens
+  headLength: CELL * 1.10,
+  headWidth: CELL * 0.92,
+  headEyeOffsetForward: CELL * 0.18,
+  headEyeOffsetSide: CELL * 0.22,
+  headPupilColor: "#2a2018",
+  // v0.5.2 tongue tokens
+  headTongueColor: "#ef9aa6",
+  headTongueLength: 3,
+  headTonguePeriod: 1600,
+  headTongueOn: 120,
+  // v0.5.2 body token
+  bodyThickness: CELL * 0.86,
 };
 
 const STAGES = [
@@ -257,64 +274,158 @@ function roundedRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawSegment(cellX, cellY) {
-  const off = getStageOffset();
-  const px = off.x + cellX * CELL + 1.5;
-  const py = off.y + cellY * CELL + 1.5;
-  const size = CELL - 3;
-  ctx.fillStyle = TOKEN.snakeBody;
-  roundedRect(px, py, size, size, TOKEN.radiusCell);
-  ctx.fill();
-  ctx.fillStyle = TOKEN.snakeShadow;
-  roundedRect(px + 1, py + size - 3, size - 2, 2, 2);
-  ctx.fill();
+// angleFromDir: direction vector → rotation angle in radians
+// No per-call allocation; uses direct lookup on fields.
+function angleFromDir(dir) {
+  if (dir.x === 1)  return 0;
+  if (dir.x === -1) return Math.PI;
+  if (dir.y === 1)  return Math.PI * 0.5;
+  return Math.PI * 1.5; // dir.y === -1
 }
 
-function drawSnakeHead(cellX, cellY, direction, now) {
-  let scale = 1;
+// computePulse: returns eat-pulse scale (1.0 to eatPulseScale triangle)
+function computePulse(now) {
   const since = now - eatStart;
-  if (since >= 0 && since < TOKEN.eatPulseDur) {
-    const t = since / TOKEN.eatPulseDur;
-    const tri = t < 0.5 ? t * 2 : (1 - t) * 2;
-    scale = 1 + (TOKEN.eatPulseScale - 1) * tri;
-  }
+  if (since < 0 || since >= TOKEN.eatPulseDur) return 1.0;
+  const t = since / TOKEN.eatPulseDur;
+  const tri = t < 0.5 ? t * 2 : (1 - t) * 2;
+  return 1 + (TOKEN.eatPulseScale - 1) * tri;
+}
+
+// computeSquash: returns [sx, sy] facing/perpendicular squash scale
+// ease-out lunge → ease-in settle over eatSquashDur
+function computeSquash(now) {
+  const since = now - eatStart;
+  if (since < 0 || since >= TOKEN.eatSquashDur) return [1.0, 1.0];
+  const t = since / TOKEN.eatSquashDur;
+  // ease-out first half (lunge), ease-in second half (settle)
+  const eased = t < 0.5
+    ? 2 * t * t                      // ease-in (fast lunge from 0)
+    : 1 - 2 * (1 - t) * (1 - t);    // ease-out (slow settle to 1)
+  // peak at t=1.0 of eased → blend from 1.0 to peak then back
+  // use a triangle on eased: peak at eased = 1 when t = 0.5
+  const tri = t < 0.5 ? t * 2 : (1 - t) * 2;
+  const sx = 1 + (TOKEN.eatSquashX - 1) * tri;
+  const sy = 1 + (TOKEN.eatSquashY - 1) * tri;
+  return [sx, sy];
+}
+
+// drawSnakeBody: draws body segments [1..len-1] as a single capsule stroke
+function drawSnakeBody(snake) {
+  const len = snake.length;
+  if (len < 2) return;
 
   const off = getStageOffset();
-  const baseSize = CELL - 3;
-  const size = baseSize * scale;
-  const cx = off.x + cellX * CELL + CELL / 2;
-  const cy = off.y + cellY * CELL + CELL / 2;
-  const px = cx - size / 2;
-  const py = cy - size / 2;
 
+  // Helper: pixel center of a cell
+  function px(seg) { return off.x + seg.x * CELL + CELL / 2; }
+  function py(seg) { return off.y + seg.y * CELL + CELL / 2; }
+
+  // Helper: midpoint between two cell centers
+  function midX(a, b) { return (px(a) + px(b)) / 2; }
+  function midY(a, b) { return (py(a) + py(b)) / 2; }
+
+  function strokeBody(lineW, color) {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineW;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Start at the midpoint between head (index 0) and first body segment (index 1)
+    ctx.moveTo(midX(snake[0], snake[1]), midY(snake[0], snake[1]));
+
+    for (let i = 1; i < len; i++) {
+      const seg = snake[i];
+      const cx = px(seg);
+      const cy = py(seg);
+
+      // Determine whether this segment is a corner:
+      // Interior segments only (i in [2..len-3]), not tail (len-1), not tail-adjacent (len-2)
+      const isInterior = i >= 2 && i <= len - 3;
+      let isCorner = false;
+      if (isInterior) {
+        const prev = snake[i - 1];
+        const next = snake[i + 1];
+        const pdx = seg.x - prev.x;
+        const pdy = seg.y - prev.y;
+        const ndx = next.x - seg.x;
+        const ndy = next.y - seg.y;
+        isCorner = (pdx !== ndx || pdy !== ndy);
+      }
+
+      if (isCorner) {
+        // quadraticCurveTo: control point = cell center, end = midpoint to next segment
+        const next = snake[i + 1];
+        ctx.quadraticCurveTo(cx, cy, midX(seg, next), midY(seg, next));
+      } else if (i === len - 1) {
+        // Tail: straight to tail center; round lineCap handles the end
+        ctx.lineTo(cx, cy);
+      } else {
+        // Straight segment or tail-adjacent: lineTo center
+        ctx.lineTo(cx, cy);
+      }
+    }
+
+    ctx.stroke();
+  }
+
+  // Shadow pass: slightly wider, offset down by 1px
+  ctx.save();
+  ctx.translate(0, 1);
+  strokeBody(TOKEN.bodyThickness + 2, TOKEN.snakeShadow);
+  ctx.restore();
+
+  // Main body stroke
+  strokeBody(TOKEN.bodyThickness, TOKEN.snakeBody);
+}
+
+// drawSnakeHead: egg-shape ellipse head with eyes and tongue
+function drawSnakeHead(head, direction, now) {
+  const off = getStageOffset();
+  const cx = off.x + head.x * CELL + CELL / 2;
+  const cy = off.y + head.y * CELL + CELL / 2;
+
+  const pulse = computePulse(now);
+  const [sx, sy] = computeSquash(now);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angleFromDir(direction));
+  ctx.scale(pulse * sx, pulse * sy);
+
+  const hl = TOKEN.headLength / 2;  // half-length (facing axis radius)
+  const hw = TOKEN.headWidth / 2;   // half-width (perpendicular axis radius)
+
+  // Head ellipse
   ctx.fillStyle = TOKEN.snakeHead;
-  roundedRect(px, py, size, size, TOKEN.radiusCell);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, hl, hw, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const eyeOffset = size * 0.22;
-  const eyeForward = size * 0.28;
-  let e1x, e1y, e2x, e2y;
-  if (direction.x === 1) {
-    e1x = cx + eyeForward; e1y = cy - eyeOffset;
-    e2x = cx + eyeForward; e2y = cy + eyeOffset;
-  } else if (direction.x === -1) {
-    e1x = cx - eyeForward; e1y = cy - eyeOffset;
-    e2x = cx - eyeForward; e2y = cy + eyeOffset;
-  } else if (direction.y === -1) {
-    e1x = cx - eyeOffset; e1y = cy - eyeForward;
-    e2x = cx + eyeOffset; e2y = cy - eyeForward;
-  } else {
-    e1x = cx - eyeOffset; e1y = cy + eyeForward;
-    e2x = cx + eyeOffset; e2y = cy + eyeForward;
-  }
-  const eyeR = 2.5 * scale;
-  const pupilR = 1.2 * scale;
+  // Eyes: forward = headEyeOffsetForward (local +x = facing), side = ±headEyeOffsetSide
+  const ef = TOKEN.headEyeOffsetForward;
+  const es = TOKEN.headEyeOffsetSide;
+  const eyeR = 2.5;
+  const pupilR = 1.2;
+
   ctx.fillStyle = "#ffffff";
-  ctx.beginPath(); ctx.arc(e1x, e1y, eyeR, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(e2x, e2y, eyeR, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#1a1a1a";
-  ctx.beginPath(); ctx.arc(e1x, e1y, pupilR, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(e2x, e2y, pupilR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ef, -es, eyeR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ef,  es, eyeR, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = TOKEN.headPupilColor;
+  ctx.beginPath(); ctx.arc(ef, -es, pupilR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ef,  es, pupilR, 0, Math.PI * 2); ctx.fill();
+
+  // Tongue: visible for headTongueOn ms out of every headTonguePeriod ms
+  if (now % TOKEN.headTonguePeriod < TOKEN.headTongueOn) {
+    ctx.fillStyle = TOKEN.headTongueColor;
+    ctx.beginPath();
+    ctx.ellipse(hl + TOKEN.headTongueLength / 2, 0, TOKEN.headTongueLength / 2, 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 function drawApple(cellX, cellY, now) {
@@ -346,8 +457,8 @@ function drawApple(cellX, cellY, now) {
 function draw(now) {
   drawBackground();
   drawApple(food.x, food.y, now);
-  for (let i = snake.length - 1; i >= 1; i--) drawSegment(snake[i].x, snake[i].y);
-  drawSnakeHead(snake[0].x, snake[0].y, dir, now);
+  drawSnakeBody(snake);
+  drawSnakeHead(snake[0], dir, now);
 }
 
 function frame(now) {
