@@ -30,8 +30,10 @@ const TOKEN = {
 };
 
 const STAGES = [
-  { id: "tutorial", label: "Tutorial", cols: 5, rows: 5, tick: 350, snakeLen: 2, clearAfterApples: 3, noFailOnHit: true },
-  { id: 1,          label: "Stage 1",  cols: 20, rows: 20, tick: 110, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
+  { id: "tutorial", label: "Tutorial", cols: 5, rows: 5, tick: 380, snakeLen: 2, clearAfterApples: 3, noFailOnHit: true },
+  { id: 1,          label: "Stage 1",  cols: 20, rows: 20, tick: 140, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
+  { id: 2,          label: "Stage 2",  cols: 20, rows: 20, tick: 130, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
+  { id: 3,          label: "Stage 3",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
 ];
 
 const STATE = {
@@ -138,7 +140,14 @@ function gameOver() {
 function enterStageClear() {
   state = STATE.STAGE_CLEAR;
   stageClearAt = performance.now();
-  showOverlay("튜토리얼 클리어!", "곧 Stage 1으로 이동합니다");
+  const next = STAGES[stageIndex + 1];
+  if (stage.id === "tutorial") {
+    showOverlay("튜토리얼 클리어!", "곧 Stage 1으로 이동합니다");
+  } else if (next) {
+    showOverlay(`${stage.label} 클리어!`, `곧 ${next.label}로 이동합니다`);
+  } else {
+    showOverlay(`${stage.label} 클리어!`, "");
+  }
 }
 
 function advanceStage() {

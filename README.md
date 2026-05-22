@@ -94,7 +94,8 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.2 | Deployment + play-through verified | ✅ |
 | v0.3 | Cute snake graphic eating an apple | ✅ |
 | v0.4 | 5×5 tutorial stage, first "Stage" concept | ✅ |
-| v0.5 | Tutorial: slower, non-punishing, skippable | 🛠 in progress |
+| v0.5 | Tutorial: slower, non-punishing, skippable | ✅ |
+| v0.5.1 | Difficulty tuning + Stage 2/3 data | ✅ |
 | v0.6+ | TBD — see `docs/specs/` once drafted | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 
