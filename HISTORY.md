@@ -4,6 +4,34 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.1 — 2026-05-23
+
+**Theme:** easier on-ramp, real stages start arriving.
+
+### What
+- Tutorial tick slowed from 350ms to **380ms**.
+- Stage 1 tick slowed from 110ms to **140ms**; `clearAfterApples` set to **5** (was `null`).
+- **Stage 2 added:** 20×20, 130ms tick, `clearAfterApples: 5` — clears after 5 apples, transitions to Stage 3.
+- **Stage 3 added:** 20×20, 120ms tick, `clearAfterApples: null` — endless mode, no further transition.
+- `enterStageClear()` now generates the stage clear overlay text dynamically from `stage.label` and the next stage's `label`, rather than hardcoding "튜토리얼 클리어!" for every stage.
+
+### Why
+The "stages 1–3 must feel very easy" project rule (memory: project_stage_difficulty) required both a slower tick for Stage 1 and actual Stage 2/3 data to exist. Without `clearAfterApples` on Stage 1, Stage 2 and Stage 3 were permanently dead code — no code path could ever reach them, making any future testing or balancing impossible. Activating the transition via data alone (no new logic) matches the "stages are data, transitions are logic" design principle established in v0.4.
+
+### Decisions worth recording
+- **(Decision A) Data-only transition activation.** `advanceStage()` already handles the array-index walk and the `stageIndex >= STAGES.length` endless guard. Adding Stage 2/3 entries to `STAGES[]` and assigning `clearAfterApples` values is sufficient; no new control flow was introduced.
+- **Dynamic clear message.** `enterStageClear()` now reads `stage.label` and `STAGES[stageIndex + 1].label` at runtime. Hardcoding the tutorial message for all stages was a regression waiting to happen as more stages were added.
+- **Stage 3 endless via `clearAfterApples: null`.** The existing `stage.clearAfterApples != null` guard in `tick()` naturally skips `enterStageClear()` when the field is `null`, so Stage 3 runs indefinitely with no extra logic.
+
+### Verification
+- Tutorial → Stage 1 auto-transition at 3 apples; Stage 1 → Stage 2 at 5 apples; Stage 2 → Stage 3 at 5 apples.
+- Tick feel is noticeably more relaxed in Tutorial (380ms) and Stage 1 (140ms) vs. previous.
+- Stage 3 runs indefinitely — eating more than 5 apples does not trigger a stage change.
+- Each stage clear shows the correct stage name in the overlay (e.g. "Stage 1 클리어! / 곧 Stage 2로 이동합니다").
+- Tutorial Esc skip still works; Stage 1 wall collision still triggers game over.
+
+---
+
 ## v0.5 — 2026-05-20
 
 **Theme:** the tutorial actually teaches.
