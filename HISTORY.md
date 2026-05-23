@@ -4,6 +4,50 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.3 — 2026-05-23
+
+**Theme:** the snake actually digests.
+
+### What
+- Added `bulges` array (module scope, cap 8) and `BULGE_MAX = 8` constant.
+- Added 7 new TOKEN entries: `bulgeFlowSpeed`, `bulgeMaxScale`, `bulgeMinScale`, `bulgeFadeMs`, `bulgeFill`, `bulgeAspect`, `bulgeWidthCap`.
+- `spawnBulge()`: called from `tick()` on apple eat. Drops oldest bulge if cap reached. Immediately enters fade for snake length ≤ 2.
+- `updateBulges(dt, now)`: advances `progress += bulgeFlowSpeed × dt / 1000` when `state === PLAYING`. Transitions to fade when `progress >= spawnLen - 1`. Removes faded bulges after `bulgeFadeMs`.
+- `evalBulgePoint(progress, snake)`: linear lerp between adjacent segment centers (simple 1st-pass; corner Bezier deferred).
+- `drawBulges(now)`: draws each bulge as a `ctx.ellipse()` oriented along the tangent vector. Scale lerps from `bulgeMaxScale` → `bulgeMinScale` during travel; held at `bulgeMinScale` during fade. Alpha 1.0 → 0.0 linear during fade.
+- Drawing order updated: background → apple → body → **bulge ellipses** → head.
+- `bulges.length = 0` added to `init()`, `loadStage()`, `gameOver()`, `advanceStage()`.
+- Module-scope `cellCenterX(seg)` / `cellCenterY(seg)` helpers extracted from `drawSnakeBody` closure. `drawSnakeBody` now calls these helpers (duplicate removed).
+- `computeSquash()` cleanup: removed unused `eased` variable and its 3-line computation (dead code from v0.5.2).
+
+### Why
+User feedback: eating an apple gave no "inside-the-snake" feedback. The bulge animation gives a calm, cozy visual receipt that the food is being digested, matching the 아기자기 tone without adding any gameplay complexity.
+
+### Decisions worth recording
+- **(A) Simple lerp, not Bezier, for 1st pass.** Corner Bezier re-use is accurate but adds ~30 lines of geometry. Visual result confirmed first on straight paths; corner Bezier may ship as a separate commit if SCM review flags visible drift at bends.
+- **(B) `state === PLAYING` guard.** Without this, bulges progress through paused/blocked/game-over screens, which reads as a bug. Single-condition check is zero cost.
+- **(C) Alpha-only fade (scale held at `bulgeMinScale`).** Shrinking while fading looked like the bulge evaporated into thin air. Alpha-only reads as "absorbed by the snake," which matches the digestion metaphor.
+- **(D) `spawnLen` snapshot at spawn.** The snake may grow after a bulge spawns; if `progressFrac` used live `snake.length`, the scale curve would shift retroactively. Snapshot freezes the intended arc.
+- **(E) `bulges.length = 0` in both `init()` and `loadStage()`.** `init()` calls `loadStage()`, but `loadStage()` is also called from `advanceStage()`. Clearing in both ensures no stale bulges cross a stage boundary.
+
+### Verification
+- Eat apple → red ellipse appears on head and flows toward tail: OK (self-check)
+- Tail reached → 200ms alpha fade → removed from array: OK (self-check)
+- Multiple apples eaten in quick succession → independent bulges: OK (self-check)
+- Space pause → bulge freezes; resume → continues from same position: OK (self-check)
+- Tutorial BLOCKED → bulge freezes: OK (self-check)
+- Game over → restart → no stale bulges: OK (self-check)
+- Tutorial Esc skip → no stale bulges: OK (self-check)
+- Snake length 2 → eat apple → bulge spawns immediately fading: OK (self-check)
+- 8+ rapid eats → oldest dropped, newest pushed: OK (self-check)
+- Drawing order: body below bulge, head above bulge: OK (self-check)
+- 60fps: simple lerp + up to 8 ellipse draw calls, well inside 16.7ms budget; no long tasks observed
+- Payload: see PR body for measured total
+
+Carryover: computeSquash() unused eased variable removed.
+
+---
+
 ## v0.5.2 — 2026-05-23
 
 **Theme:** the snake actually looks like a snake.
