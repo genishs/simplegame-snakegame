@@ -44,6 +44,14 @@ const TOKEN = {
   headTongueOn: 120,
   // v0.5.2 body token
   bodyThickness: CELL * 0.86,
+  // v0.5.3 digestion bulge tokens
+  bulgeFlowSpeed: 2.0,
+  bulgeMaxScale: 0.80,
+  bulgeMinScale: 0.60,
+  bulgeFadeMs: 200,
+  bulgeFill: "#d76461",
+  bulgeAspect: 1.15,
+  bulgeWidthCap: CELL * 0.86 * 0.95,
 };
 
 const STAGES = [
@@ -64,6 +72,10 @@ const STATE = {
 
 const STAGE_CLEAR_HOLD_MS = 800;
 
+// v0.5.3 bulge array — module scope, max 8
+const bulges = [];
+const BULGE_MAX = 8;
+
 let stageIndex;
 let stage;
 let snake, dir, nextDir, food, score, best, state;
@@ -81,6 +93,7 @@ function init() {
   state = STATE.READY;
   tickAccum = 0;
   eatStart = -Infinity;
+  bulges.length = 0;
   loadStage(stageIndex);
   updateHud();
   showOverlay("Press Space to Start", "Arrow keys or WASD to move");
@@ -98,6 +111,7 @@ function loadStage(idx) {
   dir = { x: 1, y: 0 };
   nextDir = dir;
   tickAccum = 0;
+  bulges.length = 0;
   placeFood();
   updateHud();
 }
@@ -146,6 +160,7 @@ function pause() {
 
 function gameOver() {
   state = STATE.OVER;
+  bulges.length = 0;
   if (score > best) {
     best = score;
     localStorage.setItem("snake-best", String(best));
@@ -168,6 +183,7 @@ function enterStageClear() {
 }
 
 function advanceStage() {
+  bulges.length = 0;
   stageIndex += 1;
   if (stageIndex >= STAGES.length) {
     // No more stages defined; stay on the last stage as endless mode
@@ -210,6 +226,7 @@ function tick() {
     applesEaten += 1;
     updateHud();
     eatStart = performance.now();
+    spawnBulge();
     if (stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
       return enterStageClear();
     }
@@ -224,6 +241,108 @@ function getStageOffset() {
     x: (CANVAS_W - stage.cols * CELL) / 2,
     y: (CANVAS_H - stage.rows * CELL) / 2,
   };
+}
+
+// Task 1 — module-scope cell center helpers
+function cellCenterX(seg) {
+  const off = getStageOffset();
+  return off.x + seg.x * CELL + CELL / 2;
+}
+
+function cellCenterY(seg) {
+  const off = getStageOffset();
+  return off.y + seg.y * CELL + CELL / 2;
+}
+
+// Task 2 — spawnBulge
+function spawnBulge() {
+  if (bulges.length >= BULGE_MAX) bulges.shift();
+  if (snake.length <= 2) {
+    bulges.push({ progress: 0, spawnLen: snake.length, fading: true, fadeStart: performance.now() });
+  } else {
+    bulges.push({ progress: 0, spawnLen: snake.length, fading: false, fadeStart: 0 });
+  }
+}
+
+// Task 3 — updateBulges
+function updateBulges(dt, now) {
+  if (state !== STATE.PLAYING) return;
+  for (let i = bulges.length - 1; i >= 0; i--) {
+    const b = bulges[i];
+    if (b.fading) {
+      if (now - b.fadeStart >= TOKEN.bulgeFadeMs) {
+        bulges.splice(i, 1);
+      }
+    } else {
+      b.progress += TOKEN.bulgeFlowSpeed * dt / 1000;
+      if (b.progress >= b.spawnLen - 1) {
+        b.progress = b.spawnLen - 1;
+        b.fading = true;
+        b.fadeStart = now;
+      }
+    }
+  }
+}
+
+// Task 4 — evalBulgePoint: simple linear lerp (corner Bezier deferred)
+function evalBulgePoint(progress, snakeArr) {
+  const len = snakeArr.length;
+  let i = Math.floor(progress);
+  const t = progress - i;
+
+  // clamp to last valid pair
+  if (i >= len - 1) i = len - 2;
+
+  const x0 = cellCenterX(snakeArr[i]);
+  const y0 = cellCenterY(snakeArr[i]);
+
+  // If only one segment, return it
+  if (i + 1 >= len) {
+    return { x: x0, y: y0, tx: 1, ty: 0 };
+  }
+
+  const x1 = cellCenterX(snakeArr[i + 1]);
+  const y1 = cellCenterY(snakeArr[i + 1]);
+
+  return {
+    x: x0 + (x1 - x0) * t,
+    y: y0 + (y1 - y0) * t,
+    tx: x1 - x0,
+    ty: y1 - y0,
+  };
+}
+
+// Task 5 — drawBulges
+function drawBulges(now) {
+  for (let i = 0; i < bulges.length; i++) {
+    const b = bulges[i];
+    const pt = evalBulgePoint(b.progress, snake);
+
+    const progressFrac = b.spawnLen > 1
+      ? b.progress / (b.spawnLen - 1)
+      : 1;
+
+    const s = b.fading
+      ? TOKEN.bulgeMinScale
+      : TOKEN.bulgeMaxScale + (TOKEN.bulgeMinScale - TOKEN.bulgeMaxScale) * progressFrac;
+
+    const alpha = b.fading
+      ? Math.max(0, 1 - (now - b.fadeStart) / TOKEN.bulgeFadeMs)
+      : 1.0;
+
+    const shortAxis = TOKEN.bulgeWidthCap * s;
+    const longAxis = shortAxis * TOKEN.bulgeAspect;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = TOKEN.bulgeFill;
+    ctx.translate(pt.x, pt.y);
+    ctx.rotate(Math.atan2(pt.ty, pt.tx));
+    ctx.beginPath();
+    ctx.ellipse(0, 0, longAxis / 2, shortAxis / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawBackground() {
@@ -298,12 +417,7 @@ function computeSquash(now) {
   const since = now - eatStart;
   if (since < 0 || since >= TOKEN.eatSquashDur) return [1.0, 1.0];
   const t = since / TOKEN.eatSquashDur;
-  // ease-out first half (lunge), ease-in second half (settle)
-  const eased = t < 0.5
-    ? 2 * t * t                      // ease-in (fast lunge from 0)
-    : 1 - 2 * (1 - t) * (1 - t);    // ease-out (slow settle to 1)
-  // peak at t=1.0 of eased → blend from 1.0 to peak then back
-  // use a triangle on eased: peak at eased = 1 when t = 0.5
+  // peak at t=0.5 → blend from 1.0 to peak then back
   const tri = t < 0.5 ? t * 2 : (1 - t) * 2;
   const sx = 1 + (TOKEN.eatSquashX - 1) * tri;
   const sy = 1 + (TOKEN.eatSquashY - 1) * tri;
@@ -311,19 +425,14 @@ function computeSquash(now) {
 }
 
 // drawSnakeBody: draws body segments [1..len-1] as a single capsule stroke
-function drawSnakeBody(snake) {
-  const len = snake.length;
+// Uses module-scope cellCenterX / cellCenterY helpers (Task 1)
+function drawSnakeBody(snakeArr) {
+  const len = snakeArr.length;
   if (len < 2) return;
 
-  const off = getStageOffset();
-
-  // Helper: pixel center of a cell
-  function px(seg) { return off.x + seg.x * CELL + CELL / 2; }
-  function py(seg) { return off.y + seg.y * CELL + CELL / 2; }
-
   // Helper: midpoint between two cell centers
-  function midX(a, b) { return (px(a) + px(b)) / 2; }
-  function midY(a, b) { return (py(a) + py(b)) / 2; }
+  function midX(a, b) { return (cellCenterX(a) + cellCenterX(b)) / 2; }
+  function midY(a, b) { return (cellCenterY(a) + cellCenterY(b)) / 2; }
 
   function strokeBody(lineW, color) {
     ctx.beginPath();
@@ -333,20 +442,20 @@ function drawSnakeBody(snake) {
     ctx.lineJoin = "round";
 
     // Start at the midpoint between head (index 0) and first body segment (index 1)
-    ctx.moveTo(midX(snake[0], snake[1]), midY(snake[0], snake[1]));
+    ctx.moveTo(midX(snakeArr[0], snakeArr[1]), midY(snakeArr[0], snakeArr[1]));
 
     for (let i = 1; i < len; i++) {
-      const seg = snake[i];
-      const cx = px(seg);
-      const cy = py(seg);
+      const seg = snakeArr[i];
+      const cx = cellCenterX(seg);
+      const cy = cellCenterY(seg);
 
       // Determine whether this segment is a corner:
       // Interior segments only (i in [2..len-3]), not tail (len-1), not tail-adjacent (len-2)
       const isInterior = i >= 2 && i <= len - 3;
       let isCorner = false;
       if (isInterior) {
-        const prev = snake[i - 1];
-        const next = snake[i + 1];
+        const prev = snakeArr[i - 1];
+        const next = snakeArr[i + 1];
         const pdx = seg.x - prev.x;
         const pdy = seg.y - prev.y;
         const ndx = next.x - seg.x;
@@ -356,13 +465,10 @@ function drawSnakeBody(snake) {
 
       if (isCorner) {
         // quadraticCurveTo: control point = cell center, end = midpoint to next segment
-        const next = snake[i + 1];
+        const next = snakeArr[i + 1];
         ctx.quadraticCurveTo(cx, cy, midX(seg, next), midY(seg, next));
-      } else if (i === len - 1) {
-        // Tail: straight to tail center; round lineCap handles the end
-        ctx.lineTo(cx, cy);
       } else {
-        // Straight segment or tail-adjacent: lineTo center
+        // Straight segment, tail-adjacent, or tail: lineTo center
         ctx.lineTo(cx, cy);
       }
     }
@@ -382,9 +488,8 @@ function drawSnakeBody(snake) {
 
 // drawSnakeHead: egg-shape ellipse head with eyes and tongue
 function drawSnakeHead(head, direction, now) {
-  const off = getStageOffset();
-  const cx = off.x + head.x * CELL + CELL / 2;
-  const cy = off.y + head.y * CELL + CELL / 2;
+  const cx = cellCenterX(head);
+  const cy = cellCenterY(head);
 
   const pulse = computePulse(now);
   const [sx, sy] = computeSquash(now);
@@ -454,13 +559,16 @@ function drawApple(cellX, cellY, now) {
   ctx.fill();
 }
 
+// Task 8 — draw order: background → apple → body → bulges → head
 function draw(now) {
   drawBackground();
   drawApple(food.x, food.y, now);
   drawSnakeBody(snake);
+  drawBulges(now);
   drawSnakeHead(snake[0], dir, now);
 }
 
+// Task 7 — frame: call updateBulges before draw
 function frame(now) {
   const dt = now - lastFrame;
   lastFrame = now;
@@ -478,6 +586,7 @@ function frame(now) {
     }
   }
 
+  updateBulges(dt, now);
   draw(now);
   requestAnimationFrame(frame);
 }

@@ -131,6 +131,60 @@ If sparkles are ever turned on (v0.6+ candidate): `--sparkle-count` dots at rand
 - Eat motion: pure transform math, no extra draws.
 - Verdict: comfortably under frame budget at 60fps. No path caching needed for v0.5.2.
 
+## Digestion bulge spec — v0.5.3 (apple traveling down the body)
+
+Purely visual: when the snake eats an apple, a small ellipse "bulge" appears on the head and flows along the body polyline to the tail, then fades out. Game logic is unchanged — growth still happens instantly on the same tick the apple is consumed. The bulge is a cozy visual receipt, never a gameplay signal.
+
+### Tokens
+
+| Token | Value | Reason |
+|---|---|---|
+| `bulgeFlowSpeed` | `2.0` cells/sec (= 500ms per cell) | Slow enough to be readable and calm; matches Planning's recommended pace. Faster than this starts to feel "frantic," slower feels stuck. |
+| `bulgeMaxScale` | `0.80` | Starting bulge size as a fraction of the head ellipse's short axis. 0.80 reads as "the snake just swallowed something noticeable" without overpowering the head silhouette. |
+| `bulgeMinScale` | `0.60` | Bulge shrinks as it travels — visually says "being digested." Floor of 0.60 keeps the bulge still visible at the tail (below ~0.5 it disappears into the body thickness). |
+| `bulgeFadeMs` | `200` | Once the bulge reaches the tail point, it fades out over 200ms. Same order as `--eat-squash-dur` (180ms) so the entire eat→digest→done arc reads as one soft motion sequence. |
+| `bulgeFill` | `#d76461` | `--apple-body` (`#ef6f6c`) with each RGB channel scaled to ~90% — hue preserved, value dropped ~10%. Reads as "the apple, slightly darker because it's inside the snake now." |
+| `bulgeAspect` | `1.15 : 1.0` (length : width, oriented along the body) | Slightly elongated along the direction of travel — matches the body's tube silhouette and reads as a peristaltic lump, not a floating dot. Length axis = body tangent at the bulge's current point; width axis = perpendicular to body, capped at `--body-thickness` × 0.95 so it never spills outside the body stroke. |
+| `bulgeMaxConcurrent` | `8` | Cap on simultaneous active bulges. Eating 8+ apples within 4 seconds is rare; the cap exists to bound the per-frame draw cost and avoid array growth on edge cases. Excess bulges are dropped silently (visual only, no gameplay impact). |
+
+### Position interpolation
+
+Bulges share the body's geometry exactly. Each bulge stores a `progress` value in arc-length units along the same polyline the body stroke is drawn from. Per frame:
+
+1. Advance `progress += bulgeFlowSpeed × cell × dt` (in pixels).
+2. Walk the body polyline segments to find the segment containing `progress`.
+3. Within a straight segment: **linear interpolation** between the two endpoints.
+4. Within a corner cell: use the **same `quadraticCurveTo` control point** the body uses (`--corner-implementation`), and evaluate the quadratic Bezier at the local `t`. This reuses the existing corner math — no new curve type — so the bulge tracks the body exactly through bends, never cutting the corner or floating outside the stroke.
+
+Tangent direction at the bulge's current point is the derivative of the same curve (straight segment direction, or Bezier derivative at `t` in corners). Used to orient the ellipse's long axis.
+
+### Scale interpolation
+
+`scale = lerp(bulgeMaxScale, bulgeMinScale, progressFraction)` where `progressFraction = travelledArcLength / totalBodyArcLength` at the moment of the bulge's spawn (snapshot at spawn so a growing snake doesn't retroactively stretch the curve). Linear lerp — eased curves felt over-designed in mental simulation; linear reads as steady digestion.
+
+### Fade behavior
+
+On reaching the tail point, the bulge enters fade state:
+- **Alpha only** fades from 1.0 → 0.0 over `bulgeFadeMs` (linear).
+- **Scale is held** at `bulgeMinScale` during fade — shrinking AND fading simultaneously looked "vanishing into thin air," whereas alpha-only reads as "absorbed."
+- No sparkle, no secondary effect (per Planning).
+
+### Drawing order per frame
+
+1. Body shadow stroke (existing)
+2. Body main stroke (existing)
+3. **Bulge ellipses** (new, drawn on top of body stroke, under head)
+4. Head ellipse + face (existing)
+5. Apple, HUD (existing)
+
+Bulges over body, under head — so when a fresh bulge spawns on the head it appears to emerge from underneath the head rather than overlapping it.
+
+### Performance budget (60fps check)
+
+Per frame added cost: up to 8 bulges × (1 polyline walk to find segment + 1 ellipse + 1 fill) ≈ 24 draw calls worst case, plus 8 short arc-length walks (each bounded by snake length / 8 on average). At max snake length 60 and 8 bulges this is ~80 extra arithmetic ops and 24 draw calls per frame — well inside the remaining frame budget after the v0.5.2 body+head cost. **No performance risk at 60fps.**
+
+Payload impact: estimated +1.5–2.0KB in `game.js` (one small array, one update loop, one draw loop, one helper for Bezier point+tangent). Current 18.9KB → projected ~20.5–21.0KB, comfortably under the 50KB cap.
+
 ## Apple illustration spec
 
 Composed entirely from canvas primitives — no external image:
@@ -157,7 +211,7 @@ When the active stage uses a smaller logical grid than the canvas (tutorial = 5�
 - No trail/afterimage on snake (parked)
 - No background pattern besides the subtle grid (parked)
 - No facial expression changes on death (parked — could be a nice v0.x touch)
-- **No digestion animation** (food traveling along the body) — explicitly deferred to v0.5.3, NOT in v0.5.2 scope
+- ~~**No digestion animation** (food traveling along the body) — explicitly deferred to v0.5.3, NOT in v0.5.2 scope~~ **Landed in v0.5.3** — see "Digestion bulge spec" section above.
 - No per-length body gradient — defer to v0.6+; v0.5.2 keeps the body a solid `--snake-body` and relies on the separate head ellipse for two-tone identity
 
 ## Stage visual rule
