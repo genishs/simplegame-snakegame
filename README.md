@@ -97,6 +97,7 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.5.2 | Connected snake body + egg-shape head + eat squash | ✅ |
 | v0.5.3 | Digestion bulge flowing head → tail | ✅ |
 | v0.5.4 | Left/right rotation input + mobile portrait controls | ✅ |
+| v0.5.5 | Hotfix: canvas tap fallback + BLOCKED recovery + media query relaxation | ✅ |
 | v0.6+ | TBD — see `docs/specs/` once drafted | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 

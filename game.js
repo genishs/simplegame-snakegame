@@ -676,12 +676,10 @@ function setDirection(dx, dy) {
 }
 
 function tryUnblock(dx, dy) {
+  nextDir = { x: dx, y: dy };
   if (!isSafeDir(dx, dy)) return;
-  dir = { x: dx, y: dy };
-  nextDir = dir;
-  state = STATE.PLAYING;
-  tickAccum = 0;
-  hideOverlay();
+  dir = nextDir;
+  state = STATE.PLAYING; tickAccum = 0; hideOverlay();
   updateAuxButton();
 }
 
@@ -740,7 +738,12 @@ document.addEventListener("keydown", (e) => {
 });
 
 // TODO 6 — canvas pointerdown: left-half = rotateLeft, right-half = rotateRight
+// v0.5.5: READY/PAUSED/OVER states route to auxAction() as a fallback for mobile users
 canvas.addEventListener("pointerdown", (e) => {
+  if (state === STATE.READY || state === STATE.PAUSED || state === STATE.OVER) {
+    auxAction();
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   const pixelX = (e.clientX - rect.left) / rect.width * 400;
   applyTurn(pixelX < 200 ? rotateLeft : rotateRight);

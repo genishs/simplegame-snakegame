@@ -128,7 +128,7 @@ canvas {
 }
 
 /* v0.5.4 mobile portrait media query */
-@media (max-aspect-ratio: 1/1) and (hover: none) and (pointer: coarse) {
+@media (max-aspect-ratio: 1/1) {
   :root {
     --mobile-controls-reserve: calc(var(--mobile-controls-height) + var(--canvas-mobile-gap) + 32px);
   }
