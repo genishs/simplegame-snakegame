@@ -4,6 +4,36 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.5 — 2026-05-23
+
+**Theme:** Hotfix for two v0.5.4 mobile-live bugs.
+
+### What
+- (1) Canvas `pointerdown` gains early-return for READY/PAUSED/OVER → `auxAction()`. Mobile users who miss the button strip can tap anywhere on the canvas to start/resume/restart.
+- (2) `tryUnblock` always updates `nextDir`; only commits to `dir`/PLAYING when `isSafeDir` passes. This enables the 90°+90°=180° unstuck path: two same-direction inputs in BLOCKED correctly accumulate and escape when the second rotation reaches a safe direction.
+- (3) Mobile media query relaxed from `(max-aspect-ratio: 1/1) and (hover: none) and (pointer: coarse)` to `(max-aspect-ratio: 1/1)` alone. Removes false-negative device detection; portrait aspect ratio is sufficient.
+
+### Why
+Mobile users could not start the game (no recognized button hit, canvas did not fall back). Tutorial BLOCKED could permanently stuck at corners — `nextDir` was never updated after the first unsafe rotation, making same-direction recovery impossible.
+
+### Decisions worth recording
+- **(A) Canvas tap routes to `auxAction()` for consistency with the aux button** — single Space-equivalent entry point. PLAYING and BLOCKED states continue through to rotation logic below the early-return guard.
+- **(B) Keep rotation model (no 4-direction allowance); fix BLOCKED via accumulated `nextDir`** — rotation model consistency preserved. BLOCKED escape is achieved by accumulating `nextDir` across inputs and unblocking the moment `isSafeDir` passes.
+- **(C) Drop hover/pointer conditions** — `(hover: none) and (pointer: coarse)` produced false negatives on some mobile devices; portrait aspect alone is sufficient and doubles as a desktop regression safety net (narrow windows also see the button strip).
+
+### Verification
+- Desktop keyboard regression: ← → / A D / ↑↓WS ignored / Space / Esc: OK (self-check)
+- Desktop mouse — READY canvas click → start: OK (self-check)
+- DevTools mobile portrait — canvas tap → start: OK (self-check)
+- DevTools desktop window narrowed portrait → mobile buttons visible (media query relaxation): OK (self-check)
+- BLOCKED corner — left+left or right+right (90°+90°=180°) → PLAYING recovery: OK (self-check)
+- 8-stage auto-transition preserved: OK (self-check)
+- Esc tutorial skip preserved: OK (self-check)
+- PLAYING/BLOCKED canvas tap rotation identical to v0.5.4 (regression): OK (self-check)
+- STAGE_CLEAR canvas tap → no-op: OK (self-check)
+
+---
+
 ## v0.5.4 — 2026-05-23
 
 **Theme:** left/right rotation model + mobile portrait controls.
