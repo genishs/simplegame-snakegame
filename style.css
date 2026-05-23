@@ -32,6 +32,34 @@
 
   /* Desktop default: no reserve for mobile controls */
   --mobile-controls-reserve: 0px;
+
+  /* v0.5.6 choice button tokens */
+  --choice-btn-bg: #fff4dc;
+  --choice-btn-bg-highlight: #f4d9a8;
+  --choice-btn-text-color: #3b2a1a;
+  --choice-btn-border: 1px solid #e6c9a3;
+  --choice-btn-radius: 14px;
+  --choice-btn-padding-y: 14px;
+  --choice-btn-padding-x: 24px;
+  --choice-btn-min-width: 160px;
+  --choice-btn-font-size: 16px;
+  --choice-btn-font-weight: 500;
+  --choice-btn-shadow: 0 2px 0 #e6c9a3, 0 4px 10px rgba(120, 90, 60, 0.10);
+  --choice-btn-shadow-pressed: 0 1px 0 #e6c9a3, 0 2px 6px rgba(120, 90, 60, 0.08);
+  --choice-btn-gap: 16px;
+
+  /* v0.5.6 countdown tokens */
+  --countdown-mask-color: #3b2a1a;
+  --countdown-mask-alpha: 0.35;
+  --countdown-num-size: 120px;
+  --countdown-num-color: #3b2a1a;
+  --countdown-fade-in: 180ms;
+  --countdown-hold: 640ms;
+  --countdown-fade-out: 180ms;
+  --countdown-scale-from: 0.7;
+  --countdown-total-per-num: 1000ms;
+  --countdown-skip-font-size: 12px;
+  --countdown-skip-color: #8a7460;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -103,12 +131,55 @@ canvas {
   text-align: center;
   border: 1px solid var(--border-board);
   box-shadow: 0 4px 14px rgba(120, 90, 60, 0.12);
+  pointer-events: none;
 }
 
 .overlay.hidden { display: none; }
 
 .overlay-content h2 { font-size: 22px; margin-bottom: 8px; color: var(--text-strong); }
 .overlay-content p { color: var(--text-muted); font-size: 14px; }
+
+/* v0.5.6 choice buttons */
+.choice-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--choice-btn-gap);
+  margin-top: 16px;
+  pointer-events: auto;
+}
+
+.choice-buttons.hidden {
+  display: none;
+}
+
+.choice-btn {
+  background: var(--choice-btn-bg);
+  color: var(--choice-btn-text-color);
+  border: var(--choice-btn-border);
+  border-radius: var(--choice-btn-radius);
+  padding: var(--choice-btn-padding-y) var(--choice-btn-padding-x);
+  min-width: var(--choice-btn-min-width);
+  font-size: var(--choice-btn-font-size);
+  font-weight: var(--choice-btn-font-weight);
+  font-family: inherit;
+  box-shadow: var(--choice-btn-shadow);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 80ms, box-shadow 80ms;
+}
+
+.choice-btn.is-highlighted {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--choice-btn-bg-highlight);
+}
+
+.choice-btn:active {
+  background: var(--choice-btn-bg-highlight);
+  box-shadow: var(--choice-btn-shadow-pressed);
+}
 
 .hint {
   font-size: 12px;
@@ -178,5 +249,11 @@ canvas {
 
   .hint {
     display: none;
+  }
+
+  /* v0.5.6 choice buttons — auto wrap to column on narrow viewports */
+  .choice-buttons {
+    flex-direction: column;
+    align-items: center;
   }
 }

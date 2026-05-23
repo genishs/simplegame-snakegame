@@ -12,6 +12,11 @@ const btnRotLeft  = document.getElementById("btn-rot-left");
 const btnRotRight = document.getElementById("btn-rot-right");
 const btnAux      = document.getElementById("btn-aux");
 
+// TODO 10 — choice button DOM references
+const choiceButtonsEl  = document.getElementById("choice-buttons");
+const btnChoiceTutorial = document.getElementById("btn-choice-tutorial");
+const btnChoiceSkip    = document.getElementById("btn-choice-skip");
+
 const CELL = 20;
 const CANVAS_W = canvas.width;
 const CANVAS_H = canvas.height;
@@ -57,6 +62,18 @@ const TOKEN = {
   bulgeFill: "#d76461",
   bulgeAspect: 1.15,
   bulgeWidthCap: CELL * 0.86 * 0.95,
+  // TODO 2 — v0.5.6 countdown tokens
+  countdownMaskColor: "#3b2a1a",
+  countdownMaskAlpha: 0.35,
+  countdownNumSize: 120,
+  countdownNumColor: "#3b2a1a",
+  countdownFadeIn: 180,
+  countdownHold: 640,
+  countdownFadeOut: 180,
+  countdownScaleFrom: 0.7,
+  countdownTotalPerNum: 1000,
+  countdownSkipFontSize: 12,
+  countdownSkipColor: "#8a7460",
 };
 
 const STAGES = [
@@ -66,6 +83,7 @@ const STAGES = [
   { id: 3,          label: "Stage 3",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
 ];
 
+// TODO 1 — STATE 2개 추가
 const STATE = {
   READY: "ready",
   PLAYING: "playing",
@@ -73,6 +91,8 @@ const STATE = {
   BLOCKED: "blocked",
   STAGE_CLEAR: "stage_clear",
   OVER: "over",
+  CHOICE: "choice",
+  COUNTDOWN: "countdown",
 };
 
 const STAGE_CLEAR_HOLD_MS = 800;
@@ -93,6 +113,11 @@ const HINT_PEAK_ALPHA = 0.08;
 // TODO 7 — SVG constants for aux button
 const SVG_PLAY = `<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="8 5 19 12 8 19 8 5" fill="currentColor" stroke="none"/></svg>`;
 const SVG_PAUSE = `<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/></svg>`;
+
+// TODO 3 — 모듈 스코프 상태 변수
+let choiceHighlight = 0;
+let pendingStageIdx = 0;
+let countdownStart = 0;
 
 let stageIndex;
 let stage;
@@ -242,6 +267,48 @@ function isSafeDir(dx, dy) {
 function enterBlocked() {
   state = STATE.BLOCKED;
   showOverlay("잠깐!", "← → 또는 A D로 회전해주세요");
+  updateAuxButton();
+}
+
+// TODO 6 — CHOICE 진입/이탈 함수
+function enterChoice() {
+  state = STATE.CHOICE;
+  choiceHighlight = 0;
+  showOverlay("천천히 시작해볼까요?", "처음이라면 튜토리얼을 추천해요");
+  choiceButtonsEl.classList.remove("hidden");
+  overlay.classList.remove("hidden");
+  updateChoiceHighlight();
+  updateAuxButton();
+}
+
+function updateChoiceHighlight() {
+  if (choiceHighlight === 0) {
+    btnChoiceTutorial.classList.add("is-highlighted");
+    btnChoiceSkip.classList.remove("is-highlighted");
+  } else {
+    btnChoiceTutorial.classList.remove("is-highlighted");
+    btnChoiceSkip.classList.add("is-highlighted");
+  }
+}
+
+function confirmChoice(idx) {
+  choiceButtonsEl.classList.add("hidden");
+  pendingStageIdx = idx;
+  enterCountdown();
+}
+
+function enterCountdown() {
+  state = STATE.COUNTDOWN;
+  countdownStart = performance.now();
+  hideOverlay();
+  loadStage(pendingStageIdx);
+  updateAuxButton();
+}
+
+function finishCountdown() {
+  state = STATE.PLAYING;
+  tickAccum = 0;
+  hideOverlay();
   updateAuxButton();
 }
 
@@ -637,7 +704,73 @@ function drawTouchHint(now) {
   ctx.restore();
 }
 
-// draw order: background → apple → body → bulges → head → touch hint
+// TODO 12 — drawCountdown: overlaid on top of the pre-rendered board
+function drawCountdown(now) {
+  const elapsed = now - countdownStart;
+
+  // Mask: warm dark overlay over entire canvas
+  ctx.save();
+  ctx.globalAlpha = TOKEN.countdownMaskAlpha;
+  ctx.fillStyle = TOKEN.countdownMaskColor;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.restore();
+
+  // Determine which number to show: 0→"3", 1→"2", 2→"1"
+  const idx = Math.floor(elapsed / TOKEN.countdownTotalPerNum);
+  if (idx >= 3) return; // already done (finishCountdown handles transition)
+
+  const num = 3 - idx;
+  const t = elapsed - idx * TOKEN.countdownTotalPerNum;
+
+  let alpha = 1;
+  let scale = 1.0;
+
+  if (t < TOKEN.countdownFadeIn) {
+    // Fade in: ease-out-quart, scale 0.7 → 1.0
+    const k = t / TOKEN.countdownFadeIn;
+    const eased = 1 - Math.pow(1 - k, 4);
+    alpha = eased;
+    scale = TOKEN.countdownScaleFrom + (1.0 - TOKEN.countdownScaleFrom) * eased;
+  } else if (t < TOKEN.countdownFadeIn + TOKEN.countdownHold) {
+    // Hold
+    alpha = 1;
+    scale = 1.0;
+  } else {
+    // Fade out: alpha only, scale stays 1.0
+    const fadeStart = TOKEN.countdownFadeIn + TOKEN.countdownHold;
+    const k = (t - fadeStart) / TOKEN.countdownFadeOut;
+    alpha = Math.max(0, 1 - k);
+    scale = 1.0;
+  }
+
+  // Draw the number centered on canvas
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(CANVAS_W / 2, CANVAS_H / 2);
+  ctx.scale(scale, scale);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = TOKEN.countdownNumColor;
+  ctx.font = `700 ${TOKEN.countdownNumSize}px "Segoe UI Rounded","SF Pro Rounded","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif`;
+  ctx.fillText(String(num), 0, 0);
+  ctx.restore();
+
+  // Skip hint: fades in after 300ms, max alpha 0.85
+  if (elapsed >= 300) {
+    const hintFadeElapsed = elapsed - 300;
+    const hintAlpha = Math.min(hintFadeElapsed / 400, 1.0) * 0.85;
+    ctx.save();
+    ctx.globalAlpha = hintAlpha;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = TOKEN.countdownSkipColor;
+    ctx.font = `${TOKEN.countdownSkipFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.fillText("Space · Esc — 바로 시작", CANVAS_W / 2, CANVAS_H - 24);
+    ctx.restore();
+  }
+}
+
+// draw order: background → apple → body → bulges → head → touch hint → countdown
 function draw(now) {
   drawBackground();
   drawApple(food.x, food.y, now);
@@ -645,6 +778,8 @@ function draw(now) {
   drawBulges(now);
   drawSnakeHead(snake[0], dir, now);
   drawTouchHint(now);
+  // TODO 12 — draw countdown overlay
+  if (state === STATE.COUNTDOWN) drawCountdown(now);
 }
 
 // frame: call updateBulges before draw
@@ -662,6 +797,12 @@ function frame(now) {
   } else if (state === STATE.STAGE_CLEAR) {
     if (now - stageClearAt >= STAGE_CLEAR_HOLD_MS) {
       advanceStage();
+    }
+  } else if (state === STATE.COUNTDOWN) {
+    // TODO 11 — countdown RAF tick
+    const elapsed = now - countdownStart;
+    if (elapsed >= 3 * TOKEN.countdownTotalPerNum) {
+      finishCountdown();
     }
   }
 
@@ -696,29 +837,54 @@ function applyTurn(rot) {
   dismissHint();
 }
 
-// TODO 7 — auxAction: Space-equivalent action
+// TODO 7 — auxAction: rewritten for v0.5.6
 function auxAction() {
   if (state === STATE.PLAYING) pause();
+  else if (state === STATE.PAUSED) { state = STATE.PLAYING; hideOverlay(); updateAuxButton(); }
   else if (state === STATE.BLOCKED) { /* inert */ }
-  else if (state !== STATE.STAGE_CLEAR) start();
+  else if (state === STATE.STAGE_CLEAR) { /* inert */ }
+  else if (state === STATE.READY || state === STATE.OVER) {
+    if (state === STATE.OVER) init();
+    enterChoice();
+  }
   dismissHint();
 }
 
-// TODO 7 — updateAuxButton: sync aria-label and SVG icon to current state
+// TODO 13 — updateAuxButton: CHOICE/COUNTDOWN show SVG_PLAY
 function updateAuxButton() {
   if (!btnAux) return;
   if (state === STATE.PLAYING) {
     btnAux.setAttribute("aria-label", "Pause");
     btnAux.innerHTML = SVG_PAUSE;
   } else {
-    btnAux.setAttribute("aria-label", state === STATE.PAUSED ? "Resume" : "Start");
+    btnAux.setAttribute("aria-label", "Start");
     btnAux.innerHTML = SVG_PLAY;
   }
 }
 
-// TODO 2 — keydown handler rewritten
+// TODO 8 — keydown handler with CHOICE/COUNTDOWN branches
 document.addEventListener("keydown", (e) => {
   const key = e.key;
+
+  // CHOICE state: handle selection keys
+  if (state === STATE.CHOICE) {
+    if (key === "1") { confirmChoice(0); e.preventDefault(); return; }
+    if (key === "2") { confirmChoice(1); e.preventDefault(); return; }
+    if (key === "ArrowLeft" || key === "a" || key === "A") { choiceHighlight = 0; updateChoiceHighlight(); e.preventDefault(); return; }
+    if (key === "ArrowRight" || key === "d" || key === "D") { choiceHighlight = 1; updateChoiceHighlight(); e.preventDefault(); return; }
+    if (key === " " || key === "Spacebar") { confirmChoice(choiceHighlight); e.preventDefault(); return; }
+    return;
+  }
+
+  // COUNTDOWN state: Space/Esc skip only
+  if (state === STATE.COUNTDOWN) {
+    if (key === " " || key === "Spacebar" || key === "Escape" || key === "Esc") {
+      finishCountdown(); e.preventDefault(); return;
+    }
+    return;
+  }
+
+  // Remaining states — existing branches
   if (key === " " || key === "Spacebar") {
     e.preventDefault();
     auxAction();
@@ -731,15 +897,16 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
-  // TODO 2 — left/right rotation keys (no preventDefault — preserve page scroll)
+  // left/right rotation keys
   if (key === "ArrowLeft" || key === "a" || key === "A")  { applyTurn(rotateLeft);  return; }
   if (key === "ArrowRight" || key === "d" || key === "D") { applyTurn(rotateRight); return; }
   // ↑ ↓ W S — ignored (fall-through, no action)
 });
 
-// TODO 6 — canvas pointerdown: left-half = rotateLeft, right-half = rotateRight
-// v0.5.5: READY/PAUSED/OVER states route to auxAction() as a fallback for mobile users
+// TODO 9 — canvas pointerdown with CHOICE/COUNTDOWN branches at top
 canvas.addEventListener("pointerdown", (e) => {
+  if (state === STATE.CHOICE) return;
+  if (state === STATE.COUNTDOWN) { finishCountdown(); return; }
   if (state === STATE.READY || state === STATE.PAUSED || state === STATE.OVER) {
     auxAction();
     return;
@@ -759,6 +926,10 @@ if (btnRotRight) {
 if (btnAux) {
   btnAux.addEventListener("pointerdown", (e) => { e.preventDefault(); auxAction(); });
 }
+
+// TODO 10 — choice button wiring
+btnChoiceTutorial.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(0); });
+btnChoiceSkip.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(1); });
 
 init();
 lastFrame = performance.now();
