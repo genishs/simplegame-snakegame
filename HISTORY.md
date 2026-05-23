@@ -4,6 +4,55 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.6 — 2026-05-23
+
+**Theme:** Tutorial choice screen + 3-2-1 countdown before every fresh game start.
+
+### What
+- Added `STATE.CHOICE` and `STATE.COUNTDOWN` to the `STATE` object.
+- `enterChoice()`: transitions READY/OVER → CHOICE. Resets `choiceHighlight=0`, shows overlay with title "천천히 시작해볼까요?" / subtitle "처음이라면 튜토리얼을 추천해요", reveals two DOM buttons (`#choice-buttons`). Default highlight: "튜토리얼부터 시작" (index 0). Game-over re-entry resets to index 0 each time (no localStorage).
+- `updateChoiceHighlight()`: toggles `is-highlighted` CSS class between the two choice buttons.
+- `confirmChoice(idx)`: hides `#choice-buttons`, sets `pendingStageIdx`, calls `enterCountdown()`.
+- `enterCountdown()`: transitions → COUNTDOWN, snapshots `countdownStart = performance.now()`, hides overlay, calls `loadStage(pendingStageIdx)` so the board is pre-rendered under the mask.
+- `finishCountdown()`: transitions → PLAYING, resets `tickAccum=0`, hides overlay.
+- `drawCountdown(now)`: per-frame canvas draw — full-canvas warm-dark mask (alpha 0.35), per-number 180ms fade-in (ease-out-quart scale 0.7→1.0 + alpha 0→1) + 640ms hold + 180ms alpha-only fade-out, skip hint "Space · Esc — 바로 시작" fades in at 300ms elapsed.
+- RAF countdown tick in `frame()`: checks `elapsed >= 3000ms`, calls `finishCountdown()` automatically.
+- `auxAction()` rewritten: PLAYING→pause; PAUSED→PLAYING immediately (no CHOICE/COUNTDOWN); BLOCKED→inert; STAGE_CLEAR→inert; READY/OVER → `init()` if OVER then `enterChoice()`.
+- Keydown handler: CHOICE branch at top (1/2/←→/Space); COUNTDOWN branch (Space/Esc → skip, all others ignored including rotation); existing branches below.
+- Canvas `pointerdown`: CHOICE → no-op; COUNTDOWN → `finishCountdown()`; existing READY/PAUSED/OVER/PLAYING/BLOCKED branches below.
+- DOM: `#choice-buttons` div with two `<button>` elements added inside `.overlay-content` in `index.html`.
+- CSS: 14 new `--choice-btn-*` tokens + 11 `--countdown-*` tokens in `:root`. `.choice-buttons` flex row with `flex-wrap: wrap`. `.choice-btn` base + `.is-highlighted` (outline 2px accent, bg highlight, no layout shift). Mobile portrait media query adds `flex-direction: column` to `.choice-buttons`.
+- `updateAuxButton()` simplified: CHOICE/COUNTDOWN show SVG_PLAY with aria-label "Start".
+- Choice button DOM wiring via `pointerdown` on `#btn-choice-tutorial` and `#btn-choice-skip`.
+
+### Why
+Forced tutorial removed player agency on every restart. The CHOICE screen lets experienced players bypass the tutorial while keeping it the default for new players (index 0 = tutorial always). The 3-2-1 countdown prevents "start pressed → snake already moved" surprise, making the first moment feel calm and intentional.
+
+### Decisions worth recording
+- **(A) CHOICE via `auxAction()` — single entry point.** All READY/OVER triggers (Space key, canvas tap, aux button, mouse click) route through `auxAction()`. No new event paths; branch logic stays in one place.
+- **(B) PAUSED/STAGE_CLEAR bypass CHOICE and COUNTDOWN.** The player is already engaged. Inserting a choice/countdown on resume would interrupt flow unnecessarily. PAUSED → PLAYING is immediate; STAGE_CLEAR → next stage bypasses both via `advanceStage()`.
+- **(C) CHOICE default highlight always "튜토리얼부터 시작" (index 0).** No localStorage for last choice — simplicity over personalization. New-user-friendly default on every entry including game-over re-entry.
+- **(D) COUNTDOWN → `loadStage(pendingStageIdx)` at entry, not at `finishCountdown()`.** The board is pre-rendered under the countdown mask so the player sees what they're about to play before committing. Score reset happens as part of `loadStage` when tutorial is selected via `init()` being called from OVER state before `enterChoice()`.
+- **(E) COUNTDOWN Space/Esc → skip only; rotation keys ignored.** Snake hasn't started moving; queuing a direction during countdown would silently affect the first tick. Ignoring rotation entirely is simpler and avoids "invisible state" bugs.
+- **(F) Canvas pointerdown in CHOICE → no-op.** DOM `<button>` elements handle selection directly. Canvas coordinate-based hit testing for overlapping buttons is error-prone; no-op is correct and safe.
+- **(G) Countdown mask uses `--countdown-mask-color` (#3b2a1a @ 0.35 alpha), not `--mask-outside`.** `--mask-outside` (rgba 120,90,60,0.18) is the tutorial spotlight — lighter and different semantics. A distinct token avoids meaning collision.
+
+### Verification
+- READY → Space → CHOICE (튜토리얼 강조): OK (self-check)
+- CHOICE: 1키 → tutorial COUNTDOWN; 2키 → stage1 COUNTDOWN; ← → 강조 토글; Space 확정; 버튼 직접 클릭: OK (self-check)
+- CHOICE: 캔버스 탭 → no-op: OK (self-check)
+- COUNTDOWN: 3-2-1 페이드 애니메이션; Space/Esc 스킵 → 즉시 PLAYING; 캔버스 탭 스킵: OK (self-check)
+- COUNTDOWN: 회전 키 무시; Esc가 advanceStage 호출 안 함: OK (self-check)
+- PLAYING → Space → PAUSED → Space → 즉시 PLAYING (CHOICE/COUNTDOWN 우회): OK (self-check)
+- STAGE_CLEAR → 800ms 자동 advanceStage → PLAYING (우회): OK (self-check)
+- OVER → Space → init 리셋 → CHOICE (튜토리얼 강조): OK (self-check)
+- BLOCKED → 회전 → tryUnblock 정상: OK (self-check)
+- 튜토리얼 중 Esc → advanceStage (변경 없음): OK (self-check)
+- 모바일 portrait → choice-buttons flex-direction: column; 버튼 44px 이상: OK (self-check)
+- 콘솔 에러: 0 (self-check)
+
+---
+
 ## v0.5.5 — 2026-05-23
 
 **Theme:** Hotfix for two v0.5.4 mobile-live bugs.

@@ -38,6 +38,7 @@ Open the live site and press **Space** to start.
 | ← → / A D | Turn left / Turn right |
 | Space | Start / Pause / Restart |
 | Esc | Skip tutorial (only on the tutorial stage) |
+| 1 / 2 | 시작 화면에서 튜토리얼 / 바로 시작 선택 |
 
 Your best score is stored in `localStorage` under the key `snake-best`.
 
@@ -98,6 +99,7 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.5.3 | Digestion bulge flowing head → tail | ✅ |
 | v0.5.4 | Left/right rotation input + mobile portrait controls | ✅ |
 | v0.5.5 | Hotfix: canvas tap fallback + BLOCKED recovery + media query relaxation | ✅ |
+| v0.5.6 | Tutorial choice screen + 3-2-1 countdown | ✅ |
 | v0.6+ | TBD — see `docs/specs/` once drafted | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 
