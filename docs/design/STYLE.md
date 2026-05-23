@@ -217,3 +217,104 @@ When the active stage uses a smaller logical grid than the canvas (tutorial = 5�
 ## Stage visual rule
 
 Stages 1–3, when they arrive, MUST use this palette and motion profile exactly. Visual difficulty cues (cooler/darker palette, denser grid, obstacles) only appear from stage 4 onward. This is a hard user-set rule.
+
+## v0.5.4 Mobile/Touch
+
+Input model changes for v0.5.4: arrow keys are replaced with **left/right rotation only** on all platforms (desktop and mobile). Mobile portrait orientation adds three on-screen buttons. Mobile landscape and desktop hide the buttons and accept rotation via keyboard (Left/Right arrow or A/D) and via pointer clicks on the canvas (left half = rotate left, right half = rotate right). All visual tokens from v0.5.2/v0.5.3 (`--snake-body`, `--apple-body`, body capsule, bulge, etc.) are unchanged.
+
+### Definition of "mobile" (single source of truth)
+
+```css
+@media (max-aspect-ratio: 1/1) and (hover: none) and (pointer: coarse) { /* mobile portrait — show bottom buttons */ }
+```
+
+- `(max-aspect-ratio: 1/1)` → portrait or square (height ≥ width). Landscape (`min-aspect-ratio: 1/1`) hides buttons regardless of device.
+- `(hover: none) and (pointer: coarse)` → primary input is touch. Excludes desktops in a narrow portrait window (they keep keyboard).
+- This combined query is the **only** branch point. No `max-width` breakpoint — width alone over-fires on resized desktop windows and under-fires on tablets in portrait.
+
+For canvas viewport fit (always-on, not behind the media query): the canvas keeps its 400×400 pixel buffer; CSS sizes it with `width: min(100vw - 32px, 100vh - var(--mobile-controls-reserve), 400px)` and `aspect-ratio: 1 / 1`. On desktop and mobile landscape `--mobile-controls-reserve` is `0px`; in the mobile media query above it becomes `var(--mobile-controls-height) + var(--canvas-mobile-gap) + 32px` so the canvas never overlaps the button strip.
+
+### 1. Mobile button tokens
+
+| Token | Value | Reason |
+|---|---|---|
+| `--mobile-rotate-btn-size` | `72px` | Large primary action. Comfortably above the 44px accessibility minimum, and large enough that two thumbs hitting left/right at speed never miss. 72px also matches the visual weight of the snake head at default zoom, keeping the buttons proportionate to the game. |
+| `--mobile-aux-btn-size` | `52px` | Smaller secondary action (Space toggle). Above 44px floor, but visibly subordinate to the rotate buttons so the eye reads "two primary, one auxiliary." |
+| `--mobile-btn-radius` | `18px` | Rounded square (not full circle). Full circles compete with the apple's silhouette; rounded squares feel like "soft toys / wooden blocks," reinforcing 아기자기. `18px` is exactly `--mobile-rotate-btn-size / 4`, a calm proportion. |
+| `--mobile-btn-bg-idle` | `#fff4dc` | Same as `--bg-board` — buttons read as "cut from the same cozy paper" as the play area. Not white, not gray. |
+| `--mobile-btn-bg-pressed` | `#f4d9a8` | One step down toward `--border-board`. Warm, not muddy. Used during `:active` / `pointerdown`. |
+| `--mobile-btn-bg-disabled` | `#f5ebd9` | Slightly desaturated cream. Used on the aux button when the game is in a state where Space has no effect (none currently, reserved). |
+| `--mobile-btn-border` | `1px solid #e6c9a3` | Reuses `--border-board`. Single hairline keeps the button feeling like part of the world, not a UI chrome element. |
+| `--mobile-btn-shadow` | `0 2px 0 #e6c9a3, 0 4px 10px rgba(120, 90, 60, 0.12)` | Two-layer: a 2px solid offset (gives the "pressable token" feel — like a wooden button sitting on the page) plus a soft long shadow for warmth. On `:active` the 2px offset collapses to `0 1px 0 ...` to create a tactile press. No neon glow, no inset blue ring. |
+| `--mobile-btn-icon-color` | `#3b2a1a` | Reuses `--text-strong`. Same ink as HUD numerics — visual continuity. |
+| `--mobile-btn-icon-size` | `36px` | Half the rotate button width. Leaves a generous ring of cream around each glyph so the button never feels cramped. |
+| `--mobile-btn-gap` | `24px` | Generous spacing between the three buttons. Wide enough that a thumb landing between buttons unambiguously triggers nothing (avoids ghost-press), narrow enough to keep all three reachable in one hand on a 5.5" phone. |
+
+**Icon representation: inline SVG (chosen over Unicode glyphs).**
+
+Rationale: Unicode arrows (`↺` `↻` `▶` `⏸`) render inconsistently across Android/iOS system fonts — on some devices `↺` shows as a thin outline, on others a heavy emoji, and color cannot be controlled (emoji-rendered glyphs ignore `color:`). Inline SVG gives pixel-perfect control of stroke weight, corner roundness, and color via `currentColor`, and adds <1KB total. Each icon is a 24×24 viewBox stroked at `stroke-width="2.5"` with `stroke-linecap="round"` and `stroke-linejoin="round"` so the icon style matches the snake's `lineCap=round` body — same visual language.
+
+Glyph set:
+- **Left rotate:** circular arrow opening to the left (counter-clockwise arc with arrowhead at ~8 o'clock).
+- **Right rotate:** mirrored — arrow opening to the right (clockwise arc with arrowhead at ~4 o'clock).
+- **Aux (Space toggle):** swaps between play triangle `▶` and pause double-bar `⏸` shapes based on game state. Single toggle handles start/pause/restart per Planning-Lead's spec (1:1 with the spacebar). Idle state shows play triangle; running shows pause; game-over shows a small refresh-arrow variant of the play triangle (same SVG, rotated path) — all three states use the same `--mobile-aux-btn-size` and `--mobile-btn-radius` so the button never resizes.
+
+### 2. Touch zone hint tokens
+
+Shown on the IDLE screen only, before the player has issued any input. Two faint vertical bands (left half + right half of the canvas) hint at the tap-to-rotate zones. Disappears on first input of any kind (key, click, tap, button press).
+
+| Token | Value | Reason |
+|---|---|---|
+| `--touch-zone-hint-alpha` | `0.08` | Right in the middle of the 0.06–0.10 recommended range. At 0.08 the bands are visible against `--bg-board` (`#fff4dc`) without competing with the snake or apple. Tested mentally against `--grid-line` alpha (0.06) — hint sits one notch above the grid so it reads as intentional, not as a darker grid cell. |
+| `--touch-zone-hint-color` | `#c9a574` | A muted warm tan harmonizing with `--border-board` (`#e6c9a3`) but slightly deeper so it survives at 0.08 alpha. Painted as `rgba(201, 165, 116, 0.08)` in practice. Never gray or blue — must stay in the warm-cream family. |
+| `--touch-zone-hint-divider` | `none` | No vertical line down the middle. Two soft bands meeting at the centerline read as "two halves" without a hard divider, which would feel clinical. |
+| `--touch-zone-hint-fade-in` | `400ms ease-out` | Slow enough to feel like the hint is "settling in" after the IDLE screen appears, not popping on. Starts ~300ms after IDLE render so the player sees the cozy board first, then the hint gently arrives. |
+| `--touch-zone-hint-fade-out` | `200ms ease-in` | Faster fade-out on first input — the player has signaled intent, so the hint should clear immediately but smoothly. |
+| `--touch-zone-hint-label` | `optional, OFF by default` | Tokens reserved for tiny text labels ("회전 ←" / "회전 →") if user feedback requests them post-v0.5.4. Default v0.5.4 ship: bands only, no text. Cozy is calm; the IDLE overlay copy already explains controls. |
+
+### 3. Responsive breakpoint summary
+
+Single media query controls all mobile-specific layout (see "Definition of mobile" above). No other breakpoints exist. Specifically rejected:
+
+- **`max-width: 600px`**: fires on resized desktop windows where the player still has a keyboard. Wrong audience.
+- **`orientation: portrait`**: alone, fires on a Surface tablet in portrait mode that has a keyboard attached — same issue as max-width.
+- **`pointer: coarse` alone**: fires on touchscreen laptops where users typically still prefer the keyboard. Combining with `hover: none` excludes those.
+
+Canvas viewport fit (size-clamping the canvas to viewport) runs **outside** the media query and applies universally — desktop windows resized small also get the clamped canvas, just without the buttons. This means mobile landscape behaves identically to a small desktop window: canvas fits, no buttons, keyboard/pointer input only.
+
+### 4. Bottom controls area tokens
+
+| Token | Value | Reason |
+|---|---|---|
+| `--mobile-controls-height` | `128px` | Inside the recommended 120–140px range. Equals `--mobile-rotate-btn-size` (72) + `--mobile-controls-padding` × 2 (16 × 2) + a 24px safe-area bottom buffer for iOS home-indicator clearance. Tall enough that buttons sit comfortably, short enough to leave the canvas as the dominant element. |
+| `--mobile-controls-padding` | `16px` | Inner padding on all sides of the controls strip. Matches the page-level breathing room and prevents buttons from butting against screen edges. |
+| `--mobile-controls-bg` | `#fdf6ec` | Same as `--bg-page`. The controls area is not a separate panel — it's the same warm cream as the page, so the buttons appear to sit directly on the page surface. No card chrome. |
+| `--mobile-controls-border-top` | `1px solid rgba(230, 201, 163, 0.5)` | Half-strength `--border-board` as a hairline divider between canvas and controls. Subtle enough that the eye barely registers it; just enough that the buttons feel "anchored" to a strip rather than floating. |
+| `--mobile-controls-safe-area-bottom` | `env(safe-area-inset-bottom, 0px)` | iOS home indicator + Android gesture bar clearance. Added to the height calculation, not subtracted from padding, so the button row stays at constant visual position above the system UI. |
+| `--canvas-mobile-gap` | `16px` | Gap between the canvas bottom edge and the top of the controls strip. Matches `--mobile-controls-padding` for visual rhythm. |
+| `--mobile-controls-layout` | `flex, justify-content: center, align-items: center, gap: var(--mobile-btn-gap)` | Three buttons in a single centered row: `[rotate-left] [aux] [rotate-right]`. Aux button in the middle is intentional — it's the "neutral" action between the two directional actions, and matches the spacebar's central position on a keyboard. |
+
+### Drawing order / layering on mobile
+
+1. Page background (`--bg-page`)
+2. Canvas (everything from v0.5.3 spec, unchanged)
+3. **Touch zone hint bands** — drawn on canvas as the topmost canvas layer, only when game state is IDLE and no input has occurred yet
+4. **Controls strip** — separate DOM element below the canvas, not part of the canvas; uses HTML buttons with inline-SVG icons for accessibility (real focusable buttons, real `aria-label`s, real `:active` states)
+
+The controls strip being DOM (not canvas) means screen readers see real buttons and the OS provides haptic feedback on press where supported — zero extra code on our side.
+
+### Payload check
+
+Estimated additions:
+- CSS for buttons + media query + controls strip: ~1.2KB
+- Inline SVG icons (3 × ~120 bytes): ~0.4KB
+- JS for pointer→rotation handler, button event wiring, hint fade: ~1.5KB
+
+Total estimated: ~3.1KB. Current 21KB → projected ~24KB, well under the 50KB cap.
+
+### What v0.5.4 intentionally does NOT include
+
+- **No swipe gestures.** Tap-half-of-canvas + buttons cover both directional inputs unambiguously; swipe adds detection complexity (threshold tuning, accidental scrolls) and a second input vocabulary for no gain.
+- **No haptic API calls.** Browser haptic support is patchy and inconsistent; native button `:active` states + OS-level haptics on physical buttons are sufficient. Reserved for v0.6+ if user feedback asks.
+- **No landscape-specific button layout.** Landscape hides buttons entirely (canvas centered) per Planning-Lead spec. A landscape button layout would require a third visual mode to maintain — not worth it for v0.5.4.
+- **No button labels (text under icons).** Icons are universal enough; adding "왼쪽" / "오른쪽" text under each button would crowd the strip and shrink the buttons. Reserved as an optional v0.6+ accessibility toggle.

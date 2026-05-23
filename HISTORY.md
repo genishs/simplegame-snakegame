@@ -4,6 +4,54 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.4 — 2026-05-23
+
+**Theme:** left/right rotation model + mobile portrait controls.
+
+### What
+- Replaced 4-direction absolute input with left/right relative rotation model.
+- Added `rotateLeft(d)` / `rotateRight(d)` helpers (90° rotation math).
+- Added `applyTurn(rot)` wrapper: routes to `setDirection` (PLAYING) or `tryUnblock` (BLOCKED), then dismisses touch hint.
+- Removed `dirFromKey()` function entirely.
+- Removed 180° guard from `setDirection` (rotation math makes U-turn via single input impossible; guard was dead code).
+- `isSafeDir` internal 180° guard preserved (still needed for tryUnblock correctness in tutorial).
+- Keyboard: `ArrowLeft` / `A` / `a` → rotateLeft; `ArrowRight` / `D` / `d` → rotateRight. No `preventDefault` on these keys (page scroll preserved). `↑ ↓ W S` silently ignored. Space routes through `auxAction()`.
+- Canvas `pointerdown` handler: computes `pixelX` via `getBoundingClientRect` ratio, left half → rotateLeft, right half → rotateRight.
+- Mobile DOM: 3-button strip (`#btn-rot-left`, `#btn-aux`, `#btn-rot-right`) with inline SVG icons. No text labels.
+- `updateAuxButton()`: syncs `aria-label` and SVG (play triangle / pause bars) on every state transition.
+- Touch zone hint: two faint `rgba(201, 165, 116, 0.08)` fillRect bands on canvas; 300ms delay, 400ms ease-out fade-in, 200ms ease-in fade-out on first input. Flag resets on `init()` and `loadStage()`.
+- Overlay texts updated: init → `"← → 또는 A D — 회전 · Space — 시작/일시정지/재시작"`, blocked → `"← → 또는 A D로 회전해주세요"`.
+- CSS: canvas viewport-fit (`width: min(100vw - 32px, 100vh - var(--mobile-controls-reserve), 400px)`, `aspect-ratio: 1/1`). Mobile media query `(max-aspect-ratio: 1/1) and (hover: none) and (pointer: coarse)` shows `.mobile-controls`, hides `.hint`, sets `--mobile-controls-reserve`. `safe-area-inset-bottom` on controls strip padding.
+- 17 new CSS tokens: button size, radius, colors, shadow, gap, controls area dimensions.
+- Viewport meta updated to `viewport-fit=cover`.
+- `.container` gains `width: 100%; max-width: 480px`.
+
+### Why
+Issue #4: keyboard-only 4-direction input is awkward on mobile (no buttons) and non-intuitive for relative navigation. Left/right rotation is natural for snake-type games — the player thinks "turn left" not "go north." Replacing the model globally (not just on mobile) eliminates the dual-vocabulary problem.
+
+### Decisions worth recording
+- **(A) Rotation model, not toggle.** Keeping a legacy absolute-direction mode would require two parallel input paths and two mental models. Replacing entirely is cleaner; the spec explicitly forbids a toggle option.
+- **(B) 180° guard removal is a natural bug fix.** The guard in `setDirection` was a deferred v0.1 known issue (HISTORY.md v0.3). With rotation math, a single left/right input cannot produce a U-turn, so the guard is dead code. Removing it resolves the deferred item without extra logic.
+- **(C) `isSafeDir` 180° guard preserved.** `tryUnblock` uses `isSafeDir` to prevent unblocking into a reverse-direction crash in the tutorial. This guard is still meaningful and must not be removed.
+- **(D) Single mobile media query.** `(max-aspect-ratio: 1/1) and (hover: none) and (pointer: coarse)` is the only branch point. No `max-width` — avoids misfiring on resized desktop windows.
+- **(E) `viewport-fit` canvas CSS (always-on).** Canvas size clamp applies outside the media query too, so desktop windows resized narrow also get a fitted canvas without buttons.
+- **(F) Single aux button** maps 1:1 to Space: start → pause → restart cycle. State is reflected in aria-label and icon. BLOCKED state leaves aux inert (same as Space).
+- **(G) `hintDismissed` flag resets on init/loadStage.** New game sessions show the hint again; experienced players dismiss it instantly with first input. Minimal friction for both audiences.
+
+### Verification
+- Desktop keyboard: ← → rotate, AD rotate, ↑↓WS ignored, Space start/pause/restart, Esc skip tutorial: OK (self-check)
+- Desktop mouse: canvas left/right half click rotates: OK (self-check)
+- Mobile portrait (simulated): 3-button strip visible, hint hidden, safe-area padding applied: OK (self-check)
+- Mobile landscape (simulated): buttons hidden, canvas fits viewport, no scroll: OK (self-check)
+- Touch zone hint: 300ms delay → fade-in → first input → 200ms fade-out → dismissed for session: OK (self-check)
+- 8-stage transition: tutorial → 1 → 2 → 3 preserved: OK (self-check)
+- BLOCKED recovery: tutorial wall collision → new overlay text → safe rotation key → resumed: OK (self-check)
+- U-turn: single left/right key cannot produce U-turn by rotation math: OK (self-check)
+- Console errors: 0 (self-check)
+- Payload: see PR body
+
+---
+
 ## v0.5.3 — 2026-05-23
 
 **Theme:** the snake actually digests.

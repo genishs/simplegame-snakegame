@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Snake Game</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -18,11 +18,32 @@
     <div class="overlay" id="overlay">
       <div class="overlay-content">
         <h2 id="overlay-title">Press Space to Start</h2>
-        <p id="overlay-msg">Arrow keys or WASD to move</p>
+        <p id="overlay-msg">← → 또는 A D — 회전 · Space — 시작/일시정지/재시작</p>
       </div>
     </div>
-    <p class="hint">↑ ↓ ← → / WASD — Move &nbsp;·&nbsp; Space — Pause / Restart &nbsp;·&nbsp; Esc — Skip tutorial</p>
-    <p class="version">v0.5.3</p>
+    <p class="hint">← → / A D &mdash; Turn left/right &nbsp;&middot;&nbsp; Space &mdash; Start/Pause/Restart &nbsp;&middot;&nbsp; Esc &mdash; Skip tutorial</p>
+    <p class="version">v0.5.4</p>
+    <div class="mobile-controls" id="mobile-controls">
+      <button id="btn-rot-left" class="m-btn m-rotate" type="button" aria-label="Rotate left">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+          <polyline points="20 4 20 9 15 9"/>
+        </svg>
+      </button>
+      <button id="btn-aux" class="m-btn m-aux" type="button" aria-label="Start">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="8 5 19 12 8 19 8 5" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+      <button id="btn-rot-right" class="m-btn m-rotate" type="button" aria-label="Rotate right">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <g transform="scale(-1,1) translate(-24,0)">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+            <polyline points="20 4 20 9 15 9"/>
+          </g>
+        </svg>
+      </button>
+    </div>
   </div>
   <script src="game.js"></script>
 </body>

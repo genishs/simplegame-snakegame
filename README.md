@@ -35,11 +35,9 @@ Open the live site and press **Space** to start.
 
 | Key | Action |
 |---|---|
-| ↑ ↓ ← → / W A S D | Move the snake |
+| ← → / A D | Turn left / Turn right |
 | Space | Start / Pause / Restart |
 | Esc | Skip tutorial (only on the tutorial stage) |
-
-Reverse-direction input within a single tick is ignored to prevent instant self-collision.
 
 Your best score is stored in `localStorage` under the key `snake-best`.
 
@@ -98,6 +96,7 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.5.1 | Difficulty tuning + Stage 2/3 data | ✅ |
 | v0.5.2 | Connected snake body + egg-shape head + eat squash | ✅ |
 | v0.5.3 | Digestion bulge flowing head → tail | ✅ |
+| v0.5.4 | Left/right rotation input + mobile portrait controls | ✅ |
 | v0.6+ | TBD — see `docs/specs/` once drafted | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 

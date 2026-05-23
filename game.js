@@ -7,6 +7,11 @@ const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlay-title");
 const overlayMsg = document.getElementById("overlay-msg");
 
+// TODO 7 — mobile button DOM references
+const btnRotLeft  = document.getElementById("btn-rot-left");
+const btnRotRight = document.getElementById("btn-rot-right");
+const btnAux      = document.getElementById("btn-aux");
+
 const CELL = 20;
 const CANVAS_W = canvas.width;
 const CANVAS_H = canvas.height;
@@ -76,6 +81,19 @@ const STAGE_CLEAR_HOLD_MS = 800;
 const bulges = [];
 const BULGE_MAX = 8;
 
+// TODO 5 — touch zone hint module-scope state
+let hintDismissed = false;
+let hintReadyAt = 0;
+let hintFadeOutStart = 0;
+const HINT_DELAY_MS = 300;
+const HINT_FADE_IN_MS = 400;
+const HINT_FADE_OUT_MS = 200;
+const HINT_PEAK_ALPHA = 0.08;
+
+// TODO 7 — SVG constants for aux button
+const SVG_PLAY = `<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="8 5 19 12 8 19 8 5" fill="currentColor" stroke="none"/></svg>`;
+const SVG_PAUSE = `<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/></svg>`;
+
 let stageIndex;
 let stage;
 let snake, dir, nextDir, food, score, best, state;
@@ -94,9 +112,14 @@ function init() {
   tickAccum = 0;
   eatStart = -Infinity;
   bulges.length = 0;
+  // TODO 5 — reset hint state
+  hintDismissed = false;
+  hintReadyAt = performance.now();
+  hintFadeOutStart = 0;
   loadStage(stageIndex);
   updateHud();
-  showOverlay("Press Space to Start", "Arrow keys or WASD to move");
+  showOverlay("Press Space to Start", "← → 또는 A D — 회전 · Space — 시작/일시정지/재시작");
+  updateAuxButton();
 }
 
 function loadStage(idx) {
@@ -112,8 +135,13 @@ function loadStage(idx) {
   nextDir = dir;
   tickAccum = 0;
   bulges.length = 0;
+  // TODO 5 — reset hint state on stage load
+  hintDismissed = false;
+  hintReadyAt = performance.now();
+  hintFadeOutStart = 0;
   placeFood();
   updateHud();
+  updateAuxButton();
 }
 
 function placeFood() {
@@ -150,12 +178,14 @@ function start() {
   if (state === STATE.OVER) init();
   state = STATE.PLAYING;
   hideOverlay();
+  updateAuxButton();
 }
 
 function pause() {
   if (state !== STATE.PLAYING) return;
   state = STATE.PAUSED;
   showOverlay("Paused", "Press Space to resume");
+  updateAuxButton();
 }
 
 function gameOver() {
@@ -167,6 +197,7 @@ function gameOver() {
     updateHud();
   }
   showOverlay("Game Over", `Score: ${score} · Press Space to restart`);
+  updateAuxButton();
 }
 
 function enterStageClear() {
@@ -180,6 +211,7 @@ function enterStageClear() {
   } else {
     showOverlay(`${stage.label} 클리어!`, "");
   }
+  updateAuxButton();
 }
 
 function advanceStage() {
@@ -192,6 +224,7 @@ function advanceStage() {
   loadStage(stageIndex);
   state = STATE.PLAYING;
   hideOverlay();
+  updateAuxButton();
 }
 
 function wouldHit(head) {
@@ -208,7 +241,8 @@ function isSafeDir(dx, dy) {
 
 function enterBlocked() {
   state = STATE.BLOCKED;
-  showOverlay("잠깐!", "다른 방향을 눌러주세요  ↑ ↓ ← →");
+  showOverlay("잠깐!", "← → 또는 A D로 회전해주세요");
+  updateAuxButton();
 }
 
 function tick() {
@@ -559,16 +593,61 @@ function drawApple(cellX, cellY, now) {
   ctx.fill();
 }
 
-// Task 8 — draw order: background → apple → body → bulges → head
+// TODO 5 — dismissHint
+function dismissHint() {
+  if (hintDismissed) return;
+  if (hintFadeOutStart === 0) hintFadeOutStart = performance.now();
+}
+
+// TODO 5 — drawTouchHint: shown only in STATE.READY, with fade-in/out
+function drawTouchHint(now) {
+  if (state !== STATE.READY) return;
+  if (hintDismissed) return;
+
+  let alpha = 0;
+
+  if (hintFadeOutStart > 0) {
+    // Fading out
+    const elapsed = now - hintFadeOutStart;
+    if (elapsed >= HINT_FADE_OUT_MS) {
+      hintDismissed = true;
+      return;
+    }
+    alpha = HINT_PEAK_ALPHA * (1 - elapsed / HINT_FADE_OUT_MS);
+  } else {
+    // Fading in (after delay)
+    const sinceReady = now - hintReadyAt;
+    if (sinceReady < HINT_DELAY_MS) return;
+    const fadeIn = sinceReady - HINT_DELAY_MS;
+    const t = Math.min(fadeIn / HINT_FADE_IN_MS, 1.0);
+    // ease-out: 1 - (1-t)^2
+    const eased = 1 - (1 - t) * (1 - t);
+    alpha = HINT_PEAK_ALPHA * eased;
+  }
+
+  if (alpha <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "rgba(201, 165, 116, 1)"; // full color; alpha via globalAlpha
+  // Left half
+  ctx.fillRect(0, 0, CANVAS_W / 2, CANVAS_H);
+  // Right half
+  ctx.fillRect(CANVAS_W / 2, 0, CANVAS_W / 2, CANVAS_H);
+  ctx.restore();
+}
+
+// draw order: background → apple → body → bulges → head → touch hint
 function draw(now) {
   drawBackground();
   drawApple(food.x, food.y, now);
   drawSnakeBody(snake);
   drawBulges(now);
   drawSnakeHead(snake[0], dir, now);
+  drawTouchHint(now);
 }
 
-// Task 7 — frame: call updateBulges before draw
+// frame: call updateBulges before draw
 function frame(now) {
   const dt = now - lastFrame;
   lastFrame = now;
@@ -591,8 +670,8 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// TODO 1 — setDirection: 180° guard removed
 function setDirection(dx, dy) {
-  if (dx === -dir.x && dy === -dir.y) return;
   nextDir = { x: dx, y: dy };
 }
 
@@ -603,25 +682,48 @@ function tryUnblock(dx, dy) {
   state = STATE.PLAYING;
   tickAccum = 0;
   hideOverlay();
+  updateAuxButton();
 }
 
-function dirFromKey(key) {
-  switch (key) {
-    case "ArrowUp": case "w": case "W": return { x: 0, y: -1 };
-    case "ArrowDown": case "s": case "S": return { x: 0, y: 1 };
-    case "ArrowLeft": case "a": case "A": return { x: -1, y: 0 };
-    case "ArrowRight": case "d": case "D": return { x: 1, y: 0 };
-    default: return null;
+// TODO 1 — rotateLeft / rotateRight helpers
+function rotateLeft(d)  { return { x:  d.y, y: -d.x }; }
+function rotateRight(d) { return { x: -d.y, y:  d.x }; }
+
+// TODO 1 — applyTurn: wraps rotation logic for keyboard, canvas click, and buttons
+function applyTurn(rot) {
+  const base = nextDir || dir;
+  const r = rot(base);
+  if (state === STATE.PLAYING)      setDirection(r.x, r.y);
+  else if (state === STATE.BLOCKED) tryUnblock(r.x, r.y);
+  dismissHint();
+}
+
+// TODO 7 — auxAction: Space-equivalent action
+function auxAction() {
+  if (state === STATE.PLAYING) pause();
+  else if (state === STATE.BLOCKED) { /* inert */ }
+  else if (state !== STATE.STAGE_CLEAR) start();
+  dismissHint();
+}
+
+// TODO 7 — updateAuxButton: sync aria-label and SVG icon to current state
+function updateAuxButton() {
+  if (!btnAux) return;
+  if (state === STATE.PLAYING) {
+    btnAux.setAttribute("aria-label", "Pause");
+    btnAux.innerHTML = SVG_PAUSE;
+  } else {
+    btnAux.setAttribute("aria-label", state === STATE.PAUSED ? "Resume" : "Start");
+    btnAux.innerHTML = SVG_PLAY;
   }
 }
 
+// TODO 2 — keydown handler rewritten
 document.addEventListener("keydown", (e) => {
   const key = e.key;
   if (key === " " || key === "Spacebar") {
     e.preventDefault();
-    if (state === STATE.PLAYING) pause();
-    else if (state === STATE.BLOCKED) { /* Space is inert while blocked */ }
-    else if (state !== STATE.STAGE_CLEAR) start();
+    auxAction();
     return;
   }
   if (key === "Escape" || key === "Esc") {
@@ -631,14 +733,29 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
-  const d = dirFromKey(key);
-  if (!d) return;
-  if (state === STATE.PLAYING) {
-    setDirection(d.x, d.y);
-  } else if (state === STATE.BLOCKED) {
-    tryUnblock(d.x, d.y);
-  }
+  // TODO 2 — left/right rotation keys (no preventDefault — preserve page scroll)
+  if (key === "ArrowLeft" || key === "a" || key === "A")  { applyTurn(rotateLeft);  return; }
+  if (key === "ArrowRight" || key === "d" || key === "D") { applyTurn(rotateRight); return; }
+  // ↑ ↓ W S — ignored (fall-through, no action)
 });
+
+// TODO 6 — canvas pointerdown: left-half = rotateLeft, right-half = rotateRight
+canvas.addEventListener("pointerdown", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const pixelX = (e.clientX - rect.left) / rect.width * 400;
+  applyTurn(pixelX < 200 ? rotateLeft : rotateRight);
+});
+
+// TODO 7 — mobile button wiring
+if (btnRotLeft) {
+  btnRotLeft.addEventListener("pointerdown", (e) => { e.preventDefault(); applyTurn(rotateLeft); });
+}
+if (btnRotRight) {
+  btnRotRight.addEventListener("pointerdown", (e) => { e.preventDefault(); applyTurn(rotateRight); });
+}
+if (btnAux) {
+  btnAux.addEventListener("pointerdown", (e) => { e.preventDefault(); auxAction(); });
+}
 
 init();
 lastFrame = performance.now();
