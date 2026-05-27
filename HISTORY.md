@@ -4,6 +4,91 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.7 — 2026-05-27
+
+**Theme:** 5개 품질 개선 통합 — UI 스케일링, 난이도 곡선 완화, 한글 전면 적용, 소화 wiggle 모션, 도움말 화면.
+
+### What
+
+#### Set A — UI 스케일링 (HiDPI + 반응형 캔버스)
+- `CANVAS_W`/`CANVAS_H`/`CELL` 상수 제거 → `canvasW`/`canvasH`/`cellSize` 모듈 변수로 교체 (CSS 픽셀 단위).
+- `resizeCanvas()` 신설: `canvas.getBoundingClientRect()` + `devicePixelRatio` → backing store 설정, `ctx.setTransform(dpr)` HiDPI 변환. 초기 1회 + `window.addEventListener("resize", ...)`.
+- `cellSize = Math.floor(cssW / cols)` — 정수 스냅(STYLE.md `--cell-pixel-snap` 규칙).
+- TOKEN 내 `CELL * X` 6개 항목 → factor 상수로 변경, draw 함수 내 `cellSize * factor` 인라인 재계산.
+- CSS `canvas` 규칙: 데스크탑 `min(85vh, 85vw, 560px)`, 태블릿(`768px–1023px`) `min(85vh, 85vw, 480px)`, 모바일 portrait `min(94vw, max(100px, calc(94vh - reserve - 16px)))`.
+- `.container` max-width 480 → 640px.
+
+#### Set B — 난이도 곡선 시프트
+- 튜토리얼 tick: 380 → **420ms** (memory 규칙 `feedback_tutorial_non_punishing` ≥320ms 준수).
+- Stage 1 tick: 140 → **220ms**.
+- Stage 2 tick: 130 → **180ms**.
+- Stage 3 tick: 120 → **150ms**.
+- 개발자 플레이 검증: 각 스테이지 속도가 "첫 진입에서 좌절 없음" 기준 충족.
+
+#### Set C — 한국어 전면 적용
+- `<title>` → 뱀 게임, `<h1>` → 뱀 게임.
+- HUD 라벨: `Stage:`→`스테이지:`, `Score:`→`점수:`, `Best:`→`최고:`.
+- 힌트 바: Turn left/right → 왼쪽/오른쪽 회전, Start/Pause/Restart → 시작/일시정지/재시작, Skip tutorial → 튜토리얼 건너뛰기.
+- 오버레이 텍스트: READY(`스페이스바로 시작`), PAUSED(`일시정지`/`스페이스바로 계속하기`), OVER(`게임 끝`/`점수: N · 스페이스바로 다시 시작`), STAGE_CLEAR(tutorial: `곧 스테이지 1로 이동합니다`).
+- STAGES label: Tutorial→`튜토리얼`, Stage 1→3 → `스테이지 1`~`스테이지 3`.
+- aria-label: `Rotate left`→`왼쪽 회전`, `Start`→`시작`, `Rotate right`→`오른쪽 회전`.
+- `updateAuxButton()`: `Pause`→`일시정지`, `Start`→`시작`.
+- 버전 표기: v0.5.6 → **v0.5.7**.
+- 한글 폰트 스택(`--font-stack-ui`): Apple SD Gothic Neo / Malgun Gothic 포함, `letter-spacing: -0.01em`, `font-weight` 라벨 500 / 값 600 / 타이틀 600.
+
+#### Set D — 소화 wiggle 모션
+- `spawnBulge()`: `spawnTime: performance.now()` 필드 추가.
+- TOKEN: `wiggleAmpFactor: 0.15`, `wiggleFreqHz: 2.0`, `wigglePhaseStep: Math.PI / 3`.
+- `drawBulges()`: 접선 벡터의 법선(normal) 방향으로 `sin(phase) * cellSize * 0.15 * (s/maxScale)` 오프셋 적용.
+  - phase = `i * PI/3 + (now - spawnTime) * 2π * 2.0 / 1000`
+  - 진폭이 bulge 크기에 비례하여 꼬리 근처에서 자연스럽게 감쇠.
+- 별도 타이머 없음 — 기존 RAF 루프 내 `Math.sin` 연산만 추가.
+
+#### Set E — 도움말 화면
+- `STATE.HELP` 추가.
+- `openHelp(returnTo)` / `closeHelp()`: 모달 열기/닫기, localStorage `snakegame.helpSeen` 관리, 포커스 이동.
+- `init()`: 최초 방문 시 (`helpSeen` 없으면) `openHelp(STATE.READY)` 자동 호출.
+- 키보드 핸들러 최상단 HELP 분기: Esc/Space/Enter → `closeHelp()`.
+- 캔버스 pointerdown + 모바일 버튼 3개: HELP 상태 가드.
+- DOM: `#help-modal` (role=dialog, aria-modal), 3개 섹션(조작 방법 / 스테이지 클리어 규칙 / 더 멀리 가면…), `알겠어요` 닫기 버튼.
+- CHOICE 오버레이에 `도움말` 링크 추가 → `openHelp(STATE.CHOICE)`.
+- CSS: `.help-modal`(fixed 0.4 mask), `.help-card`(96% cream bg, max-width 640px, overflow-y auto), `.help-section h3`(accent orange), `.help-keys dt`(mono chip), `.help-teaser`(left-accent stripe, 8% orange wash), `.help-close`(filled accent orange, 유일한 filled-accent 버튼), `.help-link`(muted text link).
+
+### Why
+5개 피드백을 단일 v0.5.7로 통합한 이유: 모두 기존 메커닉 품질 개선으로 새 메커닉(풀맵 클리어 등) 없음 → 메이저 번호(v0.6) 불필요. 동시에 변경 범위가 충분히 크므로 패치가 아닌 마이너(v0.5.7)로 처리.
+
+HiDPI 도입 근거: 기존 `canvas width=400` 고정 + CSS 단순 확대는 Retina/고배율 디스플레이에서 흐림 현상 발생. `devicePixelRatio * ctx.setTransform` 조합으로 backing store와 CSS 표시 크기를 독립적으로 관리.
+
+### Wiggle 상수 확정값
+- 진폭: `cellSize × 0.15` (spec 상한 20% 이내, 15%에서 선명한 꾸물거림 확인)
+- 주파수: `2.0 Hz` (500ms 주기, bulgeFlowSpeed 2.0 cells/s와 동기 — 1셀당 1 wiggle 주기)
+- 위상 스태거: `Math.PI / 3` (60° 간격, 최대 6개 bulge가 시각적으로 독립)
+
+### 틱 최종 확정값
+| 스테이지 | 이전 | v0.5.7 |
+|---|---|---|
+| 튜토리얼 | 380ms | 420ms |
+| 스테이지 1 | 140ms | 220ms |
+| 스테이지 2 | 130ms | 180ms |
+| 스테이지 3 | 120ms | 150ms |
+
+### 페이로드 측정 (wc -c)
+(PR 본문 참조)
+
+### Verification
+- 튜토리얼 420ms: 느리고 편안한 진행, 4회 연속 사망 없음 확인 (self-check)
+- Stage 1 220ms: 튜토리얼 통과 후 충분히 쉬운 속도 (self-check)
+- 캔버스 리사이즈 후 뱀/사과/오버레이 정상 렌더 (self-check)
+- HiDPI: setTransform(dpr) 적용 후 선명한 그래픽 (self-check)
+- 한글 오버레이/HUD/버튼 전 항목 확인 (self-check)
+- Wiggle: 사과 먹기 후 붉은 덩어리가 꾸물거리며 꼬리로 이동 (self-check)
+- 도움말: 첫 방문 자동 표시, 알겠어요 닫기, CHOICE에서 도움말 버튼 재진입 (self-check)
+- HELP 상태 중 게임 시작 불가, Space/Esc로 닫기 (self-check)
+- 모바일 portrait: 버튼 아래 배치, 도움말 스크롤 (self-check)
+- 콘솔 에러: 0 (self-check)
+
+---
+
 ## v0.5.6 — 2026-05-23
 
 **Theme:** Tutorial choice screen + 3-2-1 countdown before every fresh game start.
