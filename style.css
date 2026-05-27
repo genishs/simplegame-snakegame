@@ -33,6 +33,18 @@
   /* Desktop default: no reserve for mobile controls */
   --mobile-controls-reserve: 0px;
 
+  /* v0.5.7 typography stack */
+  --font-stack-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+  --font-weight-label: 500;
+  --font-weight-value: 600;
+  --font-weight-title: 600;
+  --letter-spacing-ko: -0.01em;
+  --line-height-body: 1.55;
+  --line-height-ui: 1.35;
+
+  /* v0.5.7 accent for help */
+  --accent-orange: #f4a261;
+
   /* v0.5.6 choice button tokens */
   --choice-btn-bg: #fff4dc;
   --choice-btn-bg-highlight: #f4d9a8;
@@ -71,7 +83,9 @@ body {
   justify-content: center;
   background: var(--bg-page);
   color: var(--text-strong);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-stack-ui);
+  letter-spacing: var(--letter-spacing-ko);
+  line-height: var(--line-height-ui);
 }
 
 .container {
@@ -82,7 +96,7 @@ body {
   gap: 16px;
   padding: 24px;
   width: 100%;
-  max-width: 480px;
+  max-width: 640px;
 }
 
 h1 {
@@ -106,10 +120,18 @@ canvas {
   border-radius: var(--radius-ui);
   display: block;
   box-shadow: 0 6px 20px rgba(120, 90, 60, 0.12);
-  width: min(calc(100vw - 32px), calc(100vh - var(--mobile-controls-reserve)), 400px);
+  /* v0.5.7 — desktop default: min(85vh, 85vw, 560px) */
+  width: min(85vh, 85vw, 560px);
   height: auto;
   aspect-ratio: 1 / 1;
   touch-action: manipulation;
+}
+
+/* v0.5.7 — tablet landscape (768px – 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  canvas {
+    width: min(85vh, 85vw, 480px);
+  }
 }
 
 .overlay {
@@ -136,8 +158,30 @@ canvas {
 
 .overlay.hidden { display: none; }
 
-.overlay-content h2 { font-size: 22px; margin-bottom: 8px; color: var(--text-strong); }
+.overlay-content h2 { font-size: 22px; margin-bottom: 8px; color: var(--text-strong); font-weight: var(--font-weight-title); }
 .overlay-content p { color: var(--text-muted); font-size: 14px; }
+
+/* v0.5.7 help-link: CHOICE 오버레이 내 도움말 링크 */
+.help-link {
+  display: block;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-stack-ui);
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: underline dotted currentColor;
+  text-underline-offset: 2px;
+  pointer-events: auto;
+  transition: color 120ms;
+}
+.help-link:hover,
+.help-link:focus {
+  color: var(--accent);
+  outline: none;
+}
 
 /* v0.5.6 choice buttons */
 .choice-buttons {
@@ -204,6 +248,11 @@ canvas {
     --mobile-controls-reserve: calc(var(--mobile-controls-height) + var(--canvas-mobile-gap) + 32px);
   }
 
+  canvas {
+    /* v0.5.7 — mobile portrait: 94vw or (94vh - controls reserve - 16px), whichever is smaller */
+    width: min(94vw, max(100px, calc(94vh - var(--mobile-controls-reserve, 80px) - 16px)));
+  }
+
   .mobile-controls {
     display: flex;
     justify-content: center;
@@ -255,5 +304,139 @@ canvas {
   .choice-buttons {
     flex-direction: column;
     align-items: center;
+  }
+}
+
+/* v0.5.7 — help modal */
+.help-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 20px;
+}
+
+.help-modal.hidden {
+  display: none;
+}
+
+.help-card {
+  background: rgba(253, 246, 236, 0.97);
+  max-width: 640px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 32px;
+  border-radius: var(--radius-ui);
+  box-shadow: 0 8px 32px rgba(120, 90, 60, 0.18);
+  font-family: var(--font-stack-ui);
+  line-height: var(--line-height-body);
+}
+
+.help-card h2 {
+  font-size: 22px;
+  font-weight: var(--font-weight-title);
+  color: var(--text-strong);
+  margin-bottom: 24px;
+}
+
+.help-section {
+  margin-bottom: 32px;
+}
+
+.help-section:last-of-type {
+  margin-bottom: 24px;
+}
+
+.help-section h3 {
+  font-size: 18px;
+  font-weight: var(--font-weight-value);
+  color: var(--accent-orange);
+  margin-bottom: 12px;
+}
+
+.help-section p {
+  font-size: 16px;
+  color: var(--text-strong);
+  line-height: var(--line-height-body);
+}
+
+.help-mobile-note {
+  margin-top: 10px;
+  color: var(--text-muted) !important;
+  font-size: 14px !important;
+}
+
+/* Key table (dl/dt/dd) */
+.help-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 16px;
+  align-items: baseline;
+}
+
+.help-keys dt {
+  font-family: "SF Mono", "Cascadia Mono", "Segoe UI Mono", Consolas, monospace, var(--font-stack-ui);
+  font-size: 13px;
+  color: var(--text-strong);
+  background: var(--bg-board);
+  border: 1px solid var(--border-board);
+  border-radius: 6px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.help-keys dd {
+  font-size: 15px;
+  color: var(--text-strong);
+  margin: 0;
+}
+
+/* Teaser block (v0.6 preview) */
+.help-teaser {
+  background: rgba(244, 162, 97, 0.08);
+  border-left: 3px solid var(--accent-orange);
+  border-radius: var(--radius-ui);
+  padding: 16px 20px;
+  margin-bottom: 0;
+}
+
+/* Close button */
+.help-close {
+  display: block;
+  margin: 0 auto;
+  background: var(--accent-orange);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--choice-btn-radius);
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: var(--font-weight-value);
+  font-family: var(--font-stack-ui);
+  cursor: pointer;
+  box-shadow: 0 2px 0 #c97a3a, 0 4px 10px rgba(244, 162, 97, 0.25);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 80ms, box-shadow 80ms;
+}
+
+.help-close:hover,
+.help-close:focus {
+  background: #e8954f;
+  outline: none;
+}
+
+.help-close:active {
+  box-shadow: 0 1px 0 #c97a3a, 0 2px 6px rgba(244, 162, 97, 0.20);
+}
+
+/* Mobile adjustments for help modal */
+@media (max-aspect-ratio: 1/1) {
+  .help-card {
+    padding: 20px;
+    max-height: 85vh;
   }
 }

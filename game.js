@@ -17,9 +17,37 @@ const choiceButtonsEl  = document.getElementById("choice-buttons");
 const btnChoiceTutorial = document.getElementById("btn-choice-tutorial");
 const btnChoiceSkip    = document.getElementById("btn-choice-skip");
 
-const CELL = 20;
-const CANVAS_W = canvas.width;
-const CANVAS_H = canvas.height;
+// v0.5.7 — help modal DOM references
+const helpModal    = document.getElementById("help-modal");
+const btnHelpClose = document.getElementById("btn-help-close");
+const btnHelpOpen  = document.getElementById("btn-help-open");
+
+// v0.5.7 — dynamic canvas sizing (HiDPI + responsive)
+// CANVAS_W/CANVAS_H/CELL replaced by module vars canvasW/canvasH/cellSize
+let canvasW = 400;
+let canvasH = 400;
+let cellSize = 20;
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr  = window.devicePixelRatio || 1;
+  const cssW = rect.width  || 400;
+  const cssH = rect.height || 400;
+
+  canvas.width  = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+
+  canvasW = cssW;  // store in CSS pixels for coordinate math
+  canvasH = cssH;
+
+  // Integer-snap cell size in CSS pixels (STYLE.md --cell-pixel-snap rule)
+  const logicalCols = (stage && stage.cols) ? stage.cols : 20;
+  cellSize = Math.max(1, Math.floor(cssW / logicalCols));
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+window.addEventListener("resize", resizeCanvas);
 
 const TOKEN = {
   bgBoard: "#fff4dc",
@@ -41,19 +69,19 @@ const TOKEN = {
   eatSquashX: 1.18,
   eatSquashY: 0.88,
   eatSquashDur: 180,
-  // v0.5.2 head geometry tokens
-  headLength: CELL * 1.10,
-  headWidth: CELL * 0.92,
-  headEyeOffsetForward: CELL * 0.18,
-  headEyeOffsetSide: CELL * 0.22,
+  // v0.5.2 head geometry (CELL-relative — computed inline in draw using cellSize)
+  headLengthFactor: 1.10,
+  headWidthFactor: 0.92,
+  headEyeOffsetForwardFactor: 0.18,
+  headEyeOffsetSideFactor: 0.22,
   headPupilColor: "#2a2018",
   // v0.5.2 tongue tokens
   headTongueColor: "#ef9aa6",
   headTongueLength: 3,
   headTonguePeriod: 1600,
   headTongueOn: 120,
-  // v0.5.2 body token
-  bodyThickness: CELL * 0.86,
+  // v0.5.2 body token (factor; actual = cellSize * 0.86)
+  bodyThicknessFactor: 0.86,
   // v0.5.3 digestion bulge tokens
   bulgeFlowSpeed: 2.0,
   bulgeMaxScale: 0.80,
@@ -61,7 +89,11 @@ const TOKEN = {
   bulgeFadeMs: 200,
   bulgeFill: "#d76461",
   bulgeAspect: 1.15,
-  bulgeWidthCap: CELL * 0.86 * 0.95,
+  bulgeWidthCapFactor: 0.86 * 0.95, // actual = cellSize * factor
+  // v0.5.7 wiggle tokens
+  wiggleAmpFactor: 0.15,    // amplitude = cellSize * 0.15
+  wiggleFreqHz: 2.0,
+  wigglePhaseStep: Math.PI / 3,
   // TODO 2 — v0.5.6 countdown tokens
   countdownMaskColor: "#3b2a1a",
   countdownMaskAlpha: 0.35,
@@ -77,13 +109,13 @@ const TOKEN = {
 };
 
 const STAGES = [
-  { id: "tutorial", label: "Tutorial", cols: 5, rows: 5, tick: 380, snakeLen: 2, clearAfterApples: 3, noFailOnHit: true },
-  { id: 1,          label: "Stage 1",  cols: 20, rows: 20, tick: 140, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
-  { id: 2,          label: "Stage 2",  cols: 20, rows: 20, tick: 130, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
-  { id: 3,          label: "Stage 3",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
+  { id: "tutorial", label: "튜토리얼", cols: 5, rows: 5, tick: 420, snakeLen: 2, clearAfterApples: 3, noFailOnHit: true },
+  { id: 1,          label: "스테이지 1",  cols: 20, rows: 20, tick: 220, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
+  { id: 2,          label: "스테이지 2",  cols: 20, rows: 20, tick: 180, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
+  { id: 3,          label: "스테이지 3",  cols: 20, rows: 20, tick: 150, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
 ];
 
-// TODO 1 — STATE 2개 추가
+// TODO 1 — STATE 2개 추가 + v0.5.7 HELP
 const STATE = {
   READY: "ready",
   PLAYING: "playing",
@@ -93,6 +125,7 @@ const STATE = {
   OVER: "over",
   CHOICE: "choice",
   COUNTDOWN: "countdown",
+  HELP: "help",
 };
 
 const STAGE_CLEAR_HOLD_MS = 800;
@@ -142,9 +175,14 @@ function init() {
   hintReadyAt = performance.now();
   hintFadeOutStart = 0;
   loadStage(stageIndex);
+  resizeCanvas();
   updateHud();
-  showOverlay("Press Space to Start", "← → 또는 A D — 회전 · Space — 시작/일시정지/재시작");
+  showOverlay("스페이스바로 시작", "← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작");
   updateAuxButton();
+  // v0.5.7 — auto-show help on first visit
+  try {
+    if (!localStorage.getItem("snakegame.helpSeen")) openHelp(STATE.READY);
+  } catch (_) {}
 }
 
 function loadStage(idx) {
@@ -209,7 +247,7 @@ function start() {
 function pause() {
   if (state !== STATE.PLAYING) return;
   state = STATE.PAUSED;
-  showOverlay("Paused", "Press Space to resume");
+  showOverlay("일시정지", "스페이스바로 계속하기");
   updateAuxButton();
 }
 
@@ -221,7 +259,7 @@ function gameOver() {
     localStorage.setItem("snake-best", String(best));
     updateHud();
   }
-  showOverlay("Game Over", `Score: ${score} · Press Space to restart`);
+  showOverlay("게임 끝", `점수: ${score} · 스페이스바로 다시 시작`);
   updateAuxButton();
 }
 
@@ -230,7 +268,7 @@ function enterStageClear() {
   stageClearAt = performance.now();
   const next = STAGES[stageIndex + 1];
   if (stage.id === "tutorial") {
-    showOverlay("튜토리얼 클리어!", "곧 Stage 1으로 이동합니다");
+    showOverlay("튜토리얼 클리어!", "곧 스테이지 1로 이동합니다");
   } else if (next) {
     showOverlay(`${stage.label} 클리어!`, `곧 ${next.label}로 이동합니다`);
   } else {
@@ -279,6 +317,27 @@ function enterChoice() {
   overlay.classList.remove("hidden");
   updateChoiceHighlight();
   updateAuxButton();
+}
+
+// v0.5.7 — help screen functions
+let helpReturnState = STATE.READY;
+let helpReturnFocus = null;
+
+function openHelp(returnTo) {
+  helpReturnState = returnTo || STATE.READY;
+  helpReturnFocus = document.activeElement;
+  state = STATE.HELP;
+  helpModal.classList.remove("hidden");
+  btnHelpClose.focus();
+}
+
+function closeHelp() {
+  helpModal.classList.add("hidden");
+  try { localStorage.setItem("snakegame.helpSeen", "true"); } catch (_) {}
+  state = helpReturnState;
+  if (helpReturnFocus && helpReturnFocus.focus) {
+    helpReturnFocus.focus();
+  }
 }
 
 function updateChoiceHighlight() {
@@ -339,29 +398,30 @@ function tick() {
 
 function getStageOffset() {
   return {
-    x: (CANVAS_W - stage.cols * CELL) / 2,
-    y: (CANVAS_H - stage.rows * CELL) / 2,
+    x: (canvasW - stage.cols * cellSize) / 2,
+    y: (canvasH - stage.rows * cellSize) / 2,
   };
 }
 
 // Task 1 — module-scope cell center helpers
 function cellCenterX(seg) {
   const off = getStageOffset();
-  return off.x + seg.x * CELL + CELL / 2;
+  return off.x + seg.x * cellSize + cellSize / 2;
 }
 
 function cellCenterY(seg) {
   const off = getStageOffset();
-  return off.y + seg.y * CELL + CELL / 2;
+  return off.y + seg.y * cellSize + cellSize / 2;
 }
 
-// Task 2 — spawnBulge
+// Task 2 — spawnBulge (v0.5.7: spawnTime added for wiggle phase)
 function spawnBulge() {
   if (bulges.length >= BULGE_MAX) bulges.shift();
+  const spawnTime = performance.now();
   if (snake.length <= 2) {
-    bulges.push({ progress: 0, spawnLen: snake.length, fading: true, fadeStart: performance.now() });
+    bulges.push({ progress: 0, spawnLen: snake.length, fading: true, fadeStart: spawnTime, spawnTime });
   } else {
-    bulges.push({ progress: 0, spawnLen: snake.length, fading: false, fadeStart: 0 });
+    bulges.push({ progress: 0, spawnLen: snake.length, fading: false, fadeStart: 0, spawnTime });
   }
 }
 
@@ -413,8 +473,10 @@ function evalBulgePoint(progress, snakeArr) {
   };
 }
 
-// Task 5 — drawBulges
+// Task 5 — drawBulges (v0.5.7: wiggle added)
 function drawBulges(now) {
+  const bulgeWidthCap = cellSize * TOKEN.bulgeWidthCapFactor;
+
   for (let i = 0; i < bulges.length; i++) {
     const b = bulges[i];
     const pt = evalBulgePoint(b.progress, snake);
@@ -431,13 +493,26 @@ function drawBulges(now) {
       ? Math.max(0, 1 - (now - b.fadeStart) / TOKEN.bulgeFadeMs)
       : 1.0;
 
-    const shortAxis = TOKEN.bulgeWidthCap * s;
+    const shortAxis = bulgeWidthCap * s;
     const longAxis = shortAxis * TOKEN.bulgeAspect;
+
+    // v0.5.7 wiggle: perpendicular sine offset
+    // normal vector is perpendicular to tangent (tx, ty): (-ty, tx)
+    const tLen = Math.sqrt(pt.tx * pt.tx + pt.ty * pt.ty) || 1;
+    const nx = -pt.ty / tLen;
+    const ny =  pt.tx / tLen;
+
+    const phase = i * TOKEN.wigglePhaseStep + (now - b.spawnTime) * 2 * Math.PI * TOKEN.wiggleFreqHz / 1000;
+    const wiggleAmp = cellSize * TOKEN.wiggleAmpFactor * (s / TOKEN.bulgeMaxScale);
+    const wiggleOffset = Math.sin(phase) * wiggleAmp;
+
+    const drawX = pt.x + nx * wiggleOffset;
+    const drawY = pt.y + ny * wiggleOffset;
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = TOKEN.bulgeFill;
-    ctx.translate(pt.x, pt.y);
+    ctx.translate(drawX, drawY);
     ctx.rotate(Math.atan2(pt.ty, pt.tx));
     ctx.beginPath();
     ctx.ellipse(0, 0, longAxis / 2, shortAxis / 2, 0, 0, Math.PI * 2);
@@ -448,23 +523,23 @@ function drawBulges(now) {
 
 function drawBackground() {
   ctx.fillStyle = TOKEN.bgBoard;
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
   const off = getStageOffset();
-  const w = stage.cols * CELL;
-  const h = stage.rows * CELL;
+  const w = stage.cols * cellSize;
+  const h = stage.rows * cellSize;
 
   // mask outside the active stage area (if stage is smaller than canvas)
   if (off.x > 0 || off.y > 0) {
     ctx.fillStyle = TOKEN.maskOutside;
     // top
-    if (off.y > 0) ctx.fillRect(0, 0, CANVAS_W, off.y);
+    if (off.y > 0) ctx.fillRect(0, 0, canvasW, off.y);
     // bottom
-    if (off.y > 0) ctx.fillRect(0, off.y + h, CANVAS_W, CANVAS_H - (off.y + h));
+    if (off.y > 0) ctx.fillRect(0, off.y + h, canvasW, canvasH - (off.y + h));
     // left
     if (off.x > 0) ctx.fillRect(0, off.y, off.x, h);
     // right
-    if (off.x > 0) ctx.fillRect(off.x + w, off.y, CANVAS_W - (off.x + w), h);
+    if (off.x > 0) ctx.fillRect(off.x + w, off.y, canvasW - (off.x + w), h);
   }
 
   // grid lines inside active area only
@@ -472,14 +547,14 @@ function drawBackground() {
   ctx.lineWidth = 1;
   for (let i = 1; i < stage.cols; i++) {
     ctx.beginPath();
-    ctx.moveTo(off.x + i * CELL + 0.5, off.y);
-    ctx.lineTo(off.x + i * CELL + 0.5, off.y + h);
+    ctx.moveTo(off.x + i * cellSize + 0.5, off.y);
+    ctx.lineTo(off.x + i * cellSize + 0.5, off.y + h);
     ctx.stroke();
   }
   for (let j = 1; j < stage.rows; j++) {
     ctx.beginPath();
-    ctx.moveTo(off.x, off.y + j * CELL + 0.5);
-    ctx.lineTo(off.x + w, off.y + j * CELL + 0.5);
+    ctx.moveTo(off.x, off.y + j * cellSize + 0.5);
+    ctx.lineTo(off.x + w, off.y + j * cellSize + 0.5);
     ctx.stroke();
   }
 }
@@ -531,6 +606,8 @@ function drawSnakeBody(snakeArr) {
   const len = snakeArr.length;
   if (len < 2) return;
 
+  const bodyThickness = cellSize * TOKEN.bodyThicknessFactor;
+
   // Helper: midpoint between two cell centers
   function midX(a, b) { return (cellCenterX(a) + cellCenterX(b)) / 2; }
   function midY(a, b) { return (cellCenterY(a) + cellCenterY(b)) / 2; }
@@ -580,11 +657,11 @@ function drawSnakeBody(snakeArr) {
   // Shadow pass: slightly wider, offset down by 1px
   ctx.save();
   ctx.translate(0, 1);
-  strokeBody(TOKEN.bodyThickness + 2, TOKEN.snakeShadow);
+  strokeBody(bodyThickness + 2, TOKEN.snakeShadow);
   ctx.restore();
 
   // Main body stroke
-  strokeBody(TOKEN.bodyThickness, TOKEN.snakeBody);
+  strokeBody(bodyThickness, TOKEN.snakeBody);
 }
 
 // drawSnakeHead: egg-shape ellipse head with eyes and tongue
@@ -595,13 +672,18 @@ function drawSnakeHead(head, direction, now) {
   const pulse = computePulse(now);
   const [sx, sy] = computeSquash(now);
 
+  const headLength = cellSize * TOKEN.headLengthFactor;
+  const headWidth  = cellSize * TOKEN.headWidthFactor;
+  const headEyeOffsetForward = cellSize * TOKEN.headEyeOffsetForwardFactor;
+  const headEyeOffsetSide    = cellSize * TOKEN.headEyeOffsetSideFactor;
+
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(angleFromDir(direction));
   ctx.scale(pulse * sx, pulse * sy);
 
-  const hl = TOKEN.headLength / 2;  // half-length (facing axis radius)
-  const hw = TOKEN.headWidth / 2;   // half-width (perpendicular axis radius)
+  const hl = headLength / 2;  // half-length (facing axis radius)
+  const hw = headWidth / 2;   // half-width (perpendicular axis radius)
 
   // Head ellipse
   ctx.fillStyle = TOKEN.snakeHead;
@@ -610,8 +692,8 @@ function drawSnakeHead(head, direction, now) {
   ctx.fill();
 
   // Eyes: forward = headEyeOffsetForward (local +x = facing), side = ±headEyeOffsetSide
-  const ef = TOKEN.headEyeOffsetForward;
-  const es = TOKEN.headEyeOffsetSide;
+  const ef = headEyeOffsetForward;
+  const es = headEyeOffsetSide;
   const eyeR = 2.5;
   const pupilR = 1.2;
 
@@ -637,9 +719,9 @@ function drawSnakeHead(head, direction, now) {
 function drawApple(cellX, cellY, now) {
   const off = getStageOffset();
   const wobble = Math.sin((now / TOKEN.wobblePeriod) * Math.PI * 2) * TOKEN.wobbleAmp;
-  const cx = off.x + cellX * CELL + CELL / 2;
-  const cy = off.y + cellY * CELL + CELL / 2 + wobble;
-  const r = CELL * 0.42;
+  const cx = off.x + cellX * cellSize + cellSize / 2;
+  const cy = off.y + cellY * cellSize + cellSize / 2 + wobble;
+  const r = cellSize * 0.42;
 
   ctx.fillStyle = TOKEN.appleStem;
   ctx.fillRect(cx - 0.75, cy - r - 2, 1.5, 3);
@@ -698,9 +780,9 @@ function drawTouchHint(now) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = "rgba(201, 165, 116, 1)"; // full color; alpha via globalAlpha
   // Left half
-  ctx.fillRect(0, 0, CANVAS_W / 2, CANVAS_H);
+  ctx.fillRect(0, 0, canvasW / 2, canvasH);
   // Right half
-  ctx.fillRect(CANVAS_W / 2, 0, CANVAS_W / 2, CANVAS_H);
+  ctx.fillRect(canvasW / 2, 0, canvasW / 2, canvasH);
   ctx.restore();
 }
 
@@ -712,7 +794,7 @@ function drawCountdown(now) {
   ctx.save();
   ctx.globalAlpha = TOKEN.countdownMaskAlpha;
   ctx.fillStyle = TOKEN.countdownMaskColor;
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillRect(0, 0, canvasW, canvasH);
   ctx.restore();
 
   // Determine which number to show: 0→"3", 1→"2", 2→"1"
@@ -746,7 +828,7 @@ function drawCountdown(now) {
   // Draw the number centered on canvas
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.translate(CANVAS_W / 2, CANVAS_H / 2);
+  ctx.translate(canvasW / 2, canvasH / 2);
   ctx.scale(scale, scale);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -765,7 +847,7 @@ function drawCountdown(now) {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = TOKEN.countdownSkipColor;
     ctx.font = `${TOKEN.countdownSkipFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-    ctx.fillText("Space · Esc — 바로 시작", CANVAS_W / 2, CANVAS_H - 24);
+    ctx.fillText("Space · Esc — 바로 시작", canvasW / 2, canvasH - 24);
     ctx.restore();
   }
 }
@@ -854,10 +936,10 @@ function auxAction() {
 function updateAuxButton() {
   if (!btnAux) return;
   if (state === STATE.PLAYING) {
-    btnAux.setAttribute("aria-label", "Pause");
+    btnAux.setAttribute("aria-label", "일시정지");
     btnAux.innerHTML = SVG_PAUSE;
   } else {
-    btnAux.setAttribute("aria-label", "Start");
+    btnAux.setAttribute("aria-label", "시작");
     btnAux.innerHTML = SVG_PLAY;
   }
 }
@@ -865,6 +947,15 @@ function updateAuxButton() {
 // TODO 8 — keydown handler with CHOICE/COUNTDOWN branches
 document.addEventListener("keydown", (e) => {
   const key = e.key;
+
+  // HELP state: Esc/Space/Enter closes help
+  if (state === STATE.HELP) {
+    if (key === "Escape" || key === "Esc" || key === " " || key === "Spacebar" || key === "Enter") {
+      e.preventDefault();
+      closeHelp();
+    }
+    return;
+  }
 
   // CHOICE state: handle selection keys
   if (state === STATE.CHOICE) {
@@ -905,6 +996,7 @@ document.addEventListener("keydown", (e) => {
 
 // TODO 9 — canvas pointerdown with CHOICE/COUNTDOWN branches at top
 canvas.addEventListener("pointerdown", (e) => {
+  if (state === STATE.HELP) return;
   if (state === STATE.CHOICE) return;
   if (state === STATE.COUNTDOWN) { finishCountdown(); return; }
   if (state === STATE.READY || state === STATE.PAUSED || state === STATE.OVER) {
@@ -912,24 +1004,32 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
   const rect = canvas.getBoundingClientRect();
-  const pixelX = (e.clientX - rect.left) / rect.width * 400;
-  applyTurn(pixelX < 200 ? rotateLeft : rotateRight);
+  const pixelX = e.clientX - rect.left;
+  applyTurn(pixelX < rect.width / 2 ? rotateLeft : rotateRight);
 });
 
 // TODO 7 — mobile button wiring
 if (btnRotLeft) {
-  btnRotLeft.addEventListener("pointerdown", (e) => { e.preventDefault(); applyTurn(rotateLeft); });
+  btnRotLeft.addEventListener("pointerdown", (e) => { e.preventDefault(); if (state === STATE.HELP) return; applyTurn(rotateLeft); });
 }
 if (btnRotRight) {
-  btnRotRight.addEventListener("pointerdown", (e) => { e.preventDefault(); applyTurn(rotateRight); });
+  btnRotRight.addEventListener("pointerdown", (e) => { e.preventDefault(); if (state === STATE.HELP) return; applyTurn(rotateRight); });
 }
 if (btnAux) {
-  btnAux.addEventListener("pointerdown", (e) => { e.preventDefault(); auxAction(); });
+  btnAux.addEventListener("pointerdown", (e) => { e.preventDefault(); if (state === STATE.HELP) return; auxAction(); });
 }
 
 // TODO 10 — choice button wiring
 btnChoiceTutorial.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(0); });
 btnChoiceSkip.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(1); });
+
+// v0.5.7 — help modal wiring
+if (btnHelpClose) {
+  btnHelpClose.addEventListener("click", () => closeHelp());
+}
+if (btnHelpOpen) {
+  btnHelpOpen.addEventListener("click", () => openHelp(STATE.CHOICE));
+}
 
 init();
 lastFrame = performance.now();
