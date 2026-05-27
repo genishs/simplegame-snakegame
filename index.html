@@ -3,43 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Snake Game</title>
+  <title>뱀 게임</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container">
-    <h1>Snake Game</h1>
+    <h1>뱀 게임</h1>
     <div class="hud">
-      <span>Stage: <strong id="stage">Tutorial</strong></span>
-      <span>Score: <strong id="score">0</strong></span>
-      <span>Best: <strong id="best">0</strong></span>
+      <span>스테이지: <strong id="stage">튜토리얼</strong></span>
+      <span>점수: <strong id="score">0</strong></span>
+      <span>최고: <strong id="best">0</strong></span>
     </div>
     <canvas id="board" width="400" height="400"></canvas>
     <div class="overlay" id="overlay">
       <div class="overlay-content">
-        <h2 id="overlay-title">Press Space to Start</h2>
-        <p id="overlay-msg">← → 또는 A D — 회전 · Space — 시작/일시정지/재시작</p>
+        <h2 id="overlay-title">스페이스바로 시작</h2>
+        <p id="overlay-msg">← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작</p>
         <div id="choice-buttons" class="choice-buttons hidden">
           <button id="btn-choice-tutorial" class="choice-btn" type="button">튜토리얼부터 시작</button>
           <button id="btn-choice-skip" class="choice-btn" type="button">바로 게임 시작</button>
         </div>
+        <button class="help-link" id="btn-help-open" type="button">도움말</button>
       </div>
     </div>
-    <p class="hint">← → / A D &mdash; Turn left/right &nbsp;&middot;&nbsp; Space &mdash; Start/Pause/Restart &nbsp;&middot;&nbsp; Esc &mdash; Skip tutorial &nbsp;&middot;&nbsp; 1 / 2 &mdash; 튜토리얼 / 바로 시작</p>
-    <p class="version">v0.5.6</p>
+    <p class="hint">← → / A D &mdash; 왼쪽/오른쪽 회전 &nbsp;&middot;&nbsp; 스페이스 &mdash; 시작/일시정지/재시작 &nbsp;&middot;&nbsp; Esc &mdash; 튜토리얼 건너뛰기 &nbsp;&middot;&nbsp; 1 / 2 &mdash; 튜토리얼 / 바로 시작</p>
+    <p class="version">v0.5.7</p>
     <div class="mobile-controls" id="mobile-controls">
-      <button id="btn-rot-left" class="m-btn m-rotate" type="button" aria-label="Rotate left">
+      <button id="btn-rot-left" class="m-btn m-rotate" type="button" aria-label="왼쪽 회전">
         <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
           <polyline points="20 4 20 9 15 9"/>
         </svg>
       </button>
-      <button id="btn-aux" class="m-btn m-aux" type="button" aria-label="Start">
+      <button id="btn-aux" class="m-btn m-aux" type="button" aria-label="시작">
         <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="8 5 19 12 8 19 8 5" fill="currentColor" stroke="none"/>
         </svg>
       </button>
-      <button id="btn-rot-right" class="m-btn m-rotate" type="button" aria-label="Rotate right">
+      <button id="btn-rot-right" class="m-btn m-rotate" type="button" aria-label="오른쪽 회전">
         <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <g transform="scale(-1,1) translate(-24,0)">
             <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
@@ -47,6 +48,30 @@
           </g>
         </svg>
       </button>
+    </div>
+  </div>
+  <div class="help-modal hidden" id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-card">
+      <h2 id="help-title">도움말</h2>
+      <section class="help-section">
+        <h3>조작 방법</h3>
+        <dl class="help-keys">
+          <dt>← → 또는 A D</dt><dd>뱀을 왼쪽 / 오른쪽으로 돌려요</dd>
+          <dt>스페이스바</dt><dd>시작 · 일시정지 · 재시작</dd>
+          <dt>Esc</dt><dd>튜토리얼 건너뛰기</dd>
+          <dt>1 / 2</dt><dd>튜토리얼 시작 / 바로 게임 시작</dd>
+        </dl>
+        <p class="help-mobile-note">모바일이에요? 화면 왼쪽 / 오른쪽 버튼으로 회전해요!</p>
+      </section>
+      <section class="help-section">
+        <h3>스테이지 클리어 규칙</h3>
+        <p>튜토리얼은 사과 3개, 스테이지 1~3은 사과 5개를 먹으면 다음 단계로 넘어가요. 🍎</p>
+      </section>
+      <section class="help-section help-teaser">
+        <h3>더 멀리 가면…</h3>
+        <p>스테이지 6부터는 보드 전체를 다 먹어야 클리어돼요. 뱀이 온 보드를 뒤덮는 날을 기대해주세요! (곧 업데이트)</p>
+      </section>
+      <button id="btn-help-close" class="help-close" type="button">알겠어요</button>
     </div>
   </div>
   <script src="game.js"></script>

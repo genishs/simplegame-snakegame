@@ -143,7 +143,7 @@ function init() {
   hintFadeOutStart = 0;
   loadStage(stageIndex);
   updateHud();
-  showOverlay("Press Space to Start", "← → 또는 A D — 회전 · Space — 시작/일시정지/재시작");
+  showOverlay("스페이스바로 시작", "← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작");
   updateAuxButton();
 }
 
@@ -209,7 +209,7 @@ function start() {
 function pause() {
   if (state !== STATE.PLAYING) return;
   state = STATE.PAUSED;
-  showOverlay("Paused", "Press Space to resume");
+  showOverlay("일시정지", "스페이스바로 계속하기");
   updateAuxButton();
 }
 
@@ -221,7 +221,7 @@ function gameOver() {
     localStorage.setItem("snake-best", String(best));
     updateHud();
   }
-  showOverlay("Game Over", `Score: ${score} · Press Space to restart`);
+  showOverlay("게임 끝", `점수: ${score} · 스페이스바로 다시 시작`);
   updateAuxButton();
 }
 
@@ -230,7 +230,7 @@ function enterStageClear() {
   stageClearAt = performance.now();
   const next = STAGES[stageIndex + 1];
   if (stage.id === "tutorial") {
-    showOverlay("튜토리얼 클리어!", "곧 Stage 1으로 이동합니다");
+    showOverlay("튜토리얼 클리어!", "곧 스테이지 1로 이동합니다");
   } else if (next) {
     showOverlay(`${stage.label} 클리어!`, `곧 ${next.label}로 이동합니다`);
   } else {
@@ -854,10 +854,10 @@ function auxAction() {
 function updateAuxButton() {
   if (!btnAux) return;
   if (state === STATE.PLAYING) {
-    btnAux.setAttribute("aria-label", "Pause");
+    btnAux.setAttribute("aria-label", "일시정지");
     btnAux.innerHTML = SVG_PAUSE;
   } else {
-    btnAux.setAttribute("aria-label", "Start");
+    btnAux.setAttribute("aria-label", "시작");
     btnAux.innerHTML = SVG_PLAY;
   }
 }
