@@ -72,8 +72,15 @@ HiDPI 도입 근거: 기존 `canvas width=400` 고정 + CSS 단순 확대는 Ret
 | 스테이지 2 | 130ms | 180ms |
 | 스테이지 3 | 120ms | 150ms |
 
-### 페이로드 측정 (wc -c)
-(PR 본문 참조)
+### 페이로드 측정
+| 파일 | 크기 |
+|---|---|
+| index.html | 4,249 B (4.1 KB) |
+| style.css | 11,121 B (10.9 KB) |
+| game.js | 33,095 B (32.3 KB) |
+| **합계** | **48,465 B (47.3 KB)** |
+
+50KB 상한 이내 (여유 2.7KB). v0.5.6 대비 약 +8KB (HiDPI 코드 + 한글화 + wiggle + 도움말 CSS/JS).
 
 ### Verification
 - 튜토리얼 420ms: 느리고 편안한 진행, 4회 연속 사망 없음 확인 (self-check)
