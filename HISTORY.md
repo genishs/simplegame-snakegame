@@ -4,6 +4,20 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.7.1 — 2026-05-30 (핫픽스)
+
+**Theme:** 스테이지 전환 시 캔버스 스케일 회귀 수정 (Issue #12).
+
+### Why
+
+튜토리얼(5×5)에서 스테이지 1(20×20)로 넘어갈 때 20×20 전체 맵이 캔버스를 벗어나 보이지 않는 회귀가 발생. 원인: `cellSize`는 `resizeCanvas()`에서만 `Math.floor(cssW / stage.cols)`로 계산되는데, `advanceStage()` → `loadStage()` 경로는 `stage`만 교체하고 `resizeCanvas()`를 재호출하지 않아 튜토리얼의 큰 `cellSize`(cssW/5)가 그대로 유지됨.
+
+### What
+
+- `loadStage()` 내부 `stage = STAGES[idx]` 직후 `resizeCanvas()` 1회 호출 추가. 새 `stage.cols` 기준으로 `cellSize`를 재계산한 뒤 `placeFood()`/draw가 실행되도록 보장. 모든 스테이지 전환 경로를 일괄 커버하며, `init()`의 기존 `resizeCanvas()` 호출과는 idempotent하여 무해.
+
+---
+
 ## v0.5.7 — 2026-05-27
 
 **Theme:** 5개 품질 개선 통합 — UI 스케일링, 난이도 곡선 완화, 한글 전면 적용, 소화 wiggle 모션, 도움말 화면.
