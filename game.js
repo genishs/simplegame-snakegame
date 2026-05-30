@@ -187,6 +187,10 @@ function init() {
 
 function loadStage(idx) {
   stage = STAGES[idx];
+  // v0.5.7.1 (Issue #12) — recompute cellSize for the new stage's grid before
+  // placing food / drawing, so stage transitions (e.g. 5x5 tutorial → 20x20)
+  // rescale instead of keeping the previous stage's cell size.
+  resizeCanvas();
   applesEaten = 0;
   const startX = Math.floor(stage.cols / 2) - Math.floor(stage.snakeLen / 2);
   const startY = Math.floor(stage.rows / 2);
