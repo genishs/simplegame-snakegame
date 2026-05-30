@@ -4,6 +4,20 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.7.2 — 2026-05-30 (핫픽스)
+
+**Theme:** 소화(bulge) 애니메이션 점프 회귀 수정 (Issue #14).
+
+### Why
+
+과일을 먹고 소화가 진행되는 도중 다른 과일을 먹으면, 먼저 먹은 소화 덩어리가 한 칸 머리 쪽으로 튕겨 자연스러운 흐름이 끊겨 보임. 원인: bulge의 `progress`는 snake 배열의 **인덱스 공간**에서 정의되는데, 먹는 tick은 `snake.unshift(head)`만 하고 `snake.pop()`을 생략(성장)해 기존 모든 세그먼트 인덱스가 +1 밀림. 일반 주행 tick은 `unshift`+`pop`으로 시프트가 전진과 상쇄되지만, 먹는 tick은 `pop`이 없어 기존 bulge가 가리키는 절대 세그먼트가 한 칸 점프함.
+
+### What
+
+- `tick()`의 먹기 분기에서 `spawnBulge()` 호출 직전, 기존 모든 bulge에 대해 `progress += 1`(인덱스 시프트 보정 — 같은 절대 세그먼트 계속 추종) 및 `spawnLen += 1`(뱀이 길어진 만큼 꼬리 거리 보정 + `updateBulges`의 fade 트리거 `progress >= spawnLen - 1` 조기 발동 방지) 적용. fading 여부와 무관하게 모든 bulge에 적용해 fading 덩어리의 위치 점프도 방지. 새로 spawn되는 bulge는 progress=0(방금 먹은 과일=머리)이라 보정 대상 아님.
+
+---
+
 ## v0.5.7.1 — 2026-05-30 (핫픽스)
 
 **Theme:** 스테이지 전환 시 캔버스 스케일 회귀 수정 (Issue #12).
