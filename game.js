@@ -390,6 +390,16 @@ function tick() {
     applesEaten += 1;
     updateHud();
     eatStart = performance.now();
+    // v0.5.7.2 (Issue #14): eating grows the snake (unshift without pop), so every
+    // existing segment index shifts +1. Bulge progress lives in index space, so
+    // shift each existing bulge +1 to keep tracking the same absolute segment
+    // (prevents the digestion lump from jumping a cell). spawnLen +1 too: the snake
+    // is one segment longer, and it keeps the updateBulges fade trigger
+    // (progress >= spawnLen - 1) from firing prematurely.
+    for (let bi = 0; bi < bulges.length; bi++) {
+      bulges[bi].progress += 1;
+      bulges[bi].spawnLen += 1;
+    }
     spawnBulge();
     if (stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
       return enterStageClear();
