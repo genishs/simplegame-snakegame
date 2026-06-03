@@ -4,6 +4,40 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.8 — 2026-06-03
+
+**Theme:** 렌더 전용 보간(tween)으로 칸 단위 이동을 부드럽게.
+
+### Why
+
+격자 한 칸 단위로 순간이동하듯 움직이던 뱀이, 특히 tick이 느린 튜토리얼(420ms)·초반 스테이지에서 한 박자씩 뚝뚝 끊겨 보였다. 논리 이동(격자 배열·충돌·점수)은 그대로 두고 칸과 칸 사이를 화면에서만 선형 보간해 미끄러지듯 흐르게 만들고 싶었다. 게임의 속도감·조작감·충돌 타이밍은 일절 바뀌면 안 된다.
+
+### What
+
+- **prevSnake 스냅샷**: `tick()`이 `unshift`/`pop`으로 `snake`를 변경하기 직전, 각 세그먼트의 격자 좌표를 깊은 복사해 `prevSnake`에 보관(논리 배열과 분리된 렌더 전용 배열). 추가로 PLAYING으로 진입하는 모든 전이(`frame()`에서 `prevState!==PLAYING` 감지)에서 현재 위치로 재시드 — 첫 부분-tick 구간이 stale 스냅샷이 아니라 정지(`lerp(snake,snake,t)=snake`)로 출발하도록.
+- **renderT**: `frame()`의 `while (tickAccum >= stage.tick)` 소비 루프가 끝난 **이후**의 잔여 `tickAccum`을 기준으로 `clamp(tickAccum / stage.tick, 0, 1)`. 한 프레임 다중 tick 시 점프 방지 + 저성능 단말 오버슈트 방지. `state===STATE.PLAYING`에서만 산출하고 그 외 모든 상태(READY/PAUSED/COUNTDOWN/STAGE_CLEAR/OVER/BLOCKED/CHOICE/HELP)는 `0`으로 고정 — 정지 중 뱀이 벽으로 미끄러져 들어가는 표현 차단. `tickAccum=0` 보장에 의존하지 않고 렌더 경로에서 명시적으로 게이팅.
+- **단일 진입점 주입**: `cellCenterX/Y(seg, i)`에 선택적 인덱스 `i`를 추가해 `prevSnake[i] → snake[i]`를 `renderT`로 lerp. body·bulge·head·corner의 모든 좌표가 이 두 함수를 경유하므로 한 곳 수정으로 전 경로가 보간된다. 코너 판정(`isCorner`)과 `quadraticCurveTo` 구조는 격자 좌표(`seg.x/.y`) 그대로 유지하고 그려질 점만 보간. 머리(index 0)는 위치만 보간, 회전(`angleFromDir`)은 즉시 전환 유지.
+- **성장 tick 처리**: 사과 섭취 tick은 `pop` 없이 `unshift`만 → `snake`가 `prevSnake`보다 +1 길다. 새 꼬리 인덱스는 `prevSnake[i]`가 없으므로 정적 격자 좌표로 폴백 → "꼬리가 한 박자 늦게 따라오는" 자연스러운 효과 + 길이 불일치 프레임 NaN 폴백 보장. tick 직전 스냅샷 + 인덱스 정렬 방식이라 별도 +1 시프트 없이 머리/몸통/꼬리가 모두 정확히 맞는다.
+
+### 선택한 보간 방식
+
+선형 lerp만 사용(이징/가변속도 미도입). 한 칸 이동은 거리가 짧고 등속이라 선형으로 충분히 부드럽고, 이징은 페이로드·복잡도 대비 체감 차가 작다(스펙 Decisions A).
+
+### Verification
+
+- `node --check game.js` 구문 통과.
+- 로직 self-review: 일반/성장 tick의 인덱스 정렬, 정지 상태 게이팅(renderT=0), PLAYING 재진입 시드, 잔여 tickAccum 기준 t 산출, 성장 새 꼬리/길이불일치 NaN 폴백을 코드상으로 확인. 충돌·점수·스테이지 전환·모바일 입력 경로는 보간과 무관하게 불변.
+- 페이로드 실측: game.js 35,713B + index.html 4,249B + style.css 11,121B = **51,083B (50KB=51,200B 대비 117B 여유)**. 정적 3파일 유지, 빌드툴/미니파이 미도입.
+
+### Decisions
+
+- **렌더 전용**: 논리 tick 구조·간격·입력 반영 타이밍 불변. 보간은 충돌이 격자 단위로 확정된 이후의 화면 표현일 뿐, 판정 시점을 앞당기거나 늦추지 않는다.
+- **PLAYING 외 보간 미적용**: 정지의 의미를 명확히 하고 BLOCKED/OVER 직후 벽 파고듦을 방지.
+- **인덱스 정렬 스냅샷**: tick 직전 캡처라 bulge처럼 영속 인덱스 드리프트가 없어 별도 +1 시프트가 불필요. (성장 새 꼬리만 폴백 처리.)
+- **미해소 항목(성장 새 꼬리 시각)**: "직전=자기 자신(정지)" 방식으로 구현. design-lead 플레이 확인으로 최종 확정 예정.
+
+---
+
 ## v0.5.7.2 — 2026-05-30 (핫픽스)
 
 **Theme:** 소화(bulge) 애니메이션 점프 회귀 수정 (Issue #14).

@@ -161,6 +161,16 @@ let lastFrame = 0;
 let eatStart = -Infinity;
 let stageClearAt = 0;
 
+// v0.5.8 — render-only tween: prevSnake snapshots grid positions before tick()
+// mutates snake; renderT is the [0,1] progress within the tick (PLAYING only).
+let prevSnake = [];
+let renderT = 0;
+let prevState = null;
+
+function snapshotSnake() {
+  prevSnake = snake.map((s) => ({ x: s.x, y: s.y }));
+}
+
 function init() {
   stageIndex = 0;
   score = 0;
@@ -376,6 +386,7 @@ function finishCountdown() {
 }
 
 function tick() {
+  snapshotSnake(); // v0.5.8 — capture pre-move grid positions for the render tween
   dir = nextDir;
   const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
 
@@ -418,14 +429,25 @@ function getStageOffset() {
 }
 
 // Task 1 — module-scope cell center helpers
-function cellCenterX(seg) {
-  const off = getStageOffset();
-  return off.x + seg.x * cellSize + cellSize / 2;
+// v0.5.8 — optional index `i` lerps the grid coord from prevSnake[i] → snake[i] by
+// renderT. Falls back to the static coord when i is omitted, renderT is 0, or
+// either snapshot is missing (growth's new tail / length-mismatch frame).
+function interpGrid(seg, i, axis) {
+  if (renderT <= 0 || i == null) return seg[axis];
+  const p = prevSnake[i];
+  const c = snake[i];
+  if (!p || !c) return seg[axis];
+  return p[axis] + (c[axis] - p[axis]) * renderT;
 }
 
-function cellCenterY(seg) {
+function cellCenterX(seg, i) {
   const off = getStageOffset();
-  return off.y + seg.y * cellSize + cellSize / 2;
+  return off.x + interpGrid(seg, i, "x") * cellSize + cellSize / 2;
+}
+
+function cellCenterY(seg, i) {
+  const off = getStageOffset();
+  return off.y + interpGrid(seg, i, "y") * cellSize + cellSize / 2;
 }
 
 // Task 2 — spawnBulge (v0.5.7: spawnTime added for wiggle phase)
@@ -468,16 +490,16 @@ function evalBulgePoint(progress, snakeArr) {
   // clamp to last valid pair
   if (i >= len - 1) i = len - 2;
 
-  const x0 = cellCenterX(snakeArr[i]);
-  const y0 = cellCenterY(snakeArr[i]);
+  const x0 = cellCenterX(snakeArr[i], i);
+  const y0 = cellCenterY(snakeArr[i], i);
 
   // If only one segment, return it
   if (i + 1 >= len) {
     return { x: x0, y: y0, tx: 1, ty: 0 };
   }
 
-  const x1 = cellCenterX(snakeArr[i + 1]);
-  const y1 = cellCenterY(snakeArr[i + 1]);
+  const x1 = cellCenterX(snakeArr[i + 1], i + 1);
+  const y1 = cellCenterY(snakeArr[i + 1], i + 1);
 
   return {
     x: x0 + (x1 - x0) * t,
@@ -622,9 +644,9 @@ function drawSnakeBody(snakeArr) {
 
   const bodyThickness = cellSize * TOKEN.bodyThicknessFactor;
 
-  // Helper: midpoint between two cell centers
-  function midX(a, b) { return (cellCenterX(a) + cellCenterX(b)) / 2; }
-  function midY(a, b) { return (cellCenterY(a) + cellCenterY(b)) / 2; }
+  // Helper: midpoint between two cell centers (by index, so the tween applies)
+  function midX(ia, ib) { return (cellCenterX(snakeArr[ia], ia) + cellCenterX(snakeArr[ib], ib)) / 2; }
+  function midY(ia, ib) { return (cellCenterY(snakeArr[ia], ia) + cellCenterY(snakeArr[ib], ib)) / 2; }
 
   function strokeBody(lineW, color) {
     ctx.beginPath();
@@ -634,12 +656,12 @@ function drawSnakeBody(snakeArr) {
     ctx.lineJoin = "round";
 
     // Start at the midpoint between head (index 0) and first body segment (index 1)
-    ctx.moveTo(midX(snakeArr[0], snakeArr[1]), midY(snakeArr[0], snakeArr[1]));
+    ctx.moveTo(midX(0, 1), midY(0, 1));
 
     for (let i = 1; i < len; i++) {
       const seg = snakeArr[i];
-      const cx = cellCenterX(seg);
-      const cy = cellCenterY(seg);
+      const cx = cellCenterX(seg, i);
+      const cy = cellCenterY(seg, i);
 
       // Determine whether this segment is a corner:
       // Interior segments only (i in [2..len-3]), not tail (len-1), not tail-adjacent (len-2)
@@ -657,8 +679,7 @@ function drawSnakeBody(snakeArr) {
 
       if (isCorner) {
         // quadraticCurveTo: control point = cell center, end = midpoint to next segment
-        const next = snakeArr[i + 1];
-        ctx.quadraticCurveTo(cx, cy, midX(seg, next), midY(seg, next));
+        ctx.quadraticCurveTo(cx, cy, midX(i, i + 1), midY(i, i + 1));
       } else {
         // Straight segment, tail-adjacent, or tail: lineTo center
         ctx.lineTo(cx, cy);
@@ -680,8 +701,9 @@ function drawSnakeBody(snakeArr) {
 
 // drawSnakeHead: egg-shape ellipse head with eyes and tongue
 function drawSnakeHead(head, direction, now) {
-  const cx = cellCenterX(head);
-  const cy = cellCenterY(head);
+  // v0.5.8 — head position (index 0) tweens; rotation stays an instant switch on dir.
+  const cx = cellCenterX(head, 0);
+  const cy = cellCenterY(head, 0);
 
   const pulse = computePulse(now);
   const [sx, sy] = computeSquash(now);
@@ -883,6 +905,11 @@ function frame(now) {
   const dt = now - lastFrame;
   lastFrame = now;
 
+  // v0.5.8 — seed prevSnake on every transition into PLAYING so the first partial
+  // tick renders static (lerp(snake,snake,t)) rather than from a stale snapshot.
+  if (state === STATE.PLAYING && prevState !== STATE.PLAYING) snapshotSnake();
+  prevState = state;
+
   if (state === STATE.PLAYING) {
     tickAccum += dt;
     while (tickAccum >= stage.tick) {
@@ -901,6 +928,14 @@ function frame(now) {
       finishCountdown();
     }
   }
+
+  // v0.5.8 — tween progress from the *residual* tickAccum (post-consume, so multi-
+  // tick frames don't jump), clamped to [0,1] (no overshoot on slow frames). Gated
+  // on PLAYING only: every other state renders at t=0, pinning the snake to its grid
+  // cell (no drifting into walls while stopped). Doesn't rely on tickAccum being 0.
+  renderT = state === STATE.PLAYING
+    ? Math.min(1, Math.max(0, tickAccum / stage.tick))
+    : 0;
 
   updateBulges(dt, now);
   draw(now);
