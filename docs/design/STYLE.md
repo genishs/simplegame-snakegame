@@ -605,3 +605,89 @@ The spec defines viewport-relative canvas sizing. The design contribution here i
 - **Wiggle:** perpendicular only, 15% cell amp, 2.0 Hz, phase stagger π/3, amplitude scaled with bulge size.
 - **Help:** full-screen modal, single accent-filled `알겠어요` close, "도움말" re-entry link bottom-right of CHOICE, auto-show via localStorage (no checkbox).
 - **Scaling:** 560/480/mobile ceilings, integer-snapped cells.
+
+## v0.5.9 소화 절제 + 머리 ambient (혀·하품)
+
+Two design pressures meet here: the user finds the v0.5.7 digestion wiggle "조잡" (busy/cluttered) and wants it visibly calmed, AND wants two small head ambients — a tongue flick right after eating, and a rare yawn on long straight runs. The unifying principle is the same one that governs this whole guide: **cozy = calm**. So this version *removes motion* (wiggle) and *adds motion* (flick, yawn) under one rule — every motion must read as a soft, occasional sign of life, never a frantic loop. No new colors, no new fonts: the flick reuses `headTongueColor`, the yawn reuses the head squash transform.
+
+### Set A — wiggle 절제 (다운튜닝, not removal)
+
+The v0.5.7 wiggle was `wiggleAmpFactor = 0.15` (3px peak on a 20px cell) at `2.0` Hz — one full sine cycle per cell traversed. At several concurrent bulges this synchronized, fast, full-amplitude shimmer is what reads as "조잡." We keep the *mechanism* (perpendicular sine, per-bulge phase stagger, amplitude tied to bulge size) and only retune the two knobs that drive the busyness: amplitude and frequency. The `drawBulges` structure, normal-vector math, and corner/fade behavior are untouched (spec Set A / Decision B).
+
+| Token | 값 | 이유 |
+|---|---|---|
+| `wiggleAmpFactor` | `0.07` (was `0.15`) | 절제의 핵심. Midpoint of the planner-recommended `0.06`–`0.08`. On a 20px cell this is a **1.4px peak** (was 3px) — still perceptible against the `--body-thickness` (17.2px) tube so the bulge reads as "alive," but less than half the former throw, so the lump now *creeps* rather than *slithers*. Not `0`: zeroing it would revert digestion to the rigid slide v0.5.7 deliberately fixed, and Decision A forbids removal. `0.06` felt a hair too dead in mental sim against multiple bulges; `0.08` still flirted with "busy"; `0.07` is the calm-but-living center. |
+| `wiggleFreqHz` | `1.5` (was `2.0`) | Lowered within the planner-allowed `1.2`–`2.0`. The "조잡" complaint is as much about *speed* as throw: at 2.0 Hz the bulge re-crosses the centerline every 250ms, which the eye reads as a nervous vibration. `1.5` Hz (full cycle = 667ms) slows each crossing to a gentle sway. This breaks the v0.5.7 "exactly one wiggle per cell" lockstep with `bulgeFlowSpeed` (2.0 cells/s) on purpose — that synchronization was a tidy idea that in practice made the motion feel mechanical/repetitive. A slight desync makes the wiggle read as organic peristalsis, not a metronome. Not below `1.2`: too slow starts to look like the bulge is *stuck*, which reads as a hitch. |
+| `wigglePhaseStep` | `Math.PI / 3` (unchanged) | Kept exactly. This is the per-bulge phase stagger that prevents multiple bulges from wiggling in lockstep (a lockstep set reads as one rigid object). It is an *anti-synchronization* device, not an amplitude/speed knob, so it is not part of the 절제. Retuning it would risk re-introducing the "one big object" failure mode. |
+| wiggle 진행-감쇠 (progress decay) | **already present — keep, no new token** | The spec's optional "진폭이 꼬리에 가까워질수록 감쇠" is **already satisfied** by the existing `wiggleAmp = cellSize × wiggleAmpFactor × (s / bulgeMaxScale)` term (game.js:542). Because `s` lerps `bulgeMaxScale`(0.80)→`bulgeMinScale`(0.60) along the body, the wiggle naturally decays to `0.60/0.80 = 0.75×` of peak by the tail — the bulge "calms as it's absorbed." **Decision: do NOT add a separate progress-decay coefficient.** Adding a second decay multiplier on top would double-attenuate the already-reduced 0.07 amplitude, leaving near-zero wiggle at the tail (reverting to the rigid-slide look this whole motion exists to avoid). Re-using the existing scale-coupled decay keeps it to **zero new tokens** for Set A and one knob to reason about. |
+
+**Net effect of Set A:** peak throw 3px → 1.4px, crossing speed halved, decay-toward-tail unchanged. The bulge stays a living lump but stops competing with the snake for attention.
+
+### Set B — tongue flick (과일 섭취 직후 1회)
+
+The head already has an idle tongue: a flat on/off flicker, `headTongueOn`(120ms) visible out of every `headTonguePeriod`(1600ms), drawn in `headTongueColor` (`#ef9aa6`). The flick **reuses that exact draw path and color** (spec Decision C) — no new color, no new shape. It differs from idle only in *trigger*, *duration*, and a *small length emphasis* so a player can tell "the snake just tasted something" apart from the ambient idle flicker.
+
+| Token | 값 | 이유 |
+|---|---|---|
+| `tongueFlickDur` | `200ms` | Upper-middle of the planner-recommended `120`–`220ms`. The idle flicker is 120ms; making the flick **longer (200ms)** is the primary differentiator — a deliberate "낼름" hold rather than the idle's quick twitch. 200ms also sits just *after* `eatSquashDur`(180ms)/`eatPulseDur`(150ms), so the eat reads as one soft sequence: lunge-squash settles, then the tongue lingers a beat longer like a satisfied taste, mirroring how `bulgeFadeMs`(200) and `--eat-squash-dur`(180) are tuned to chain. Shorter (120–150ms) made the flick indistinguishable from a coincidental idle flicker; 220ms started to feel like the tongue was "stuck out." |
+| `tongueFlickLengthScale` | `1.6` | The flick draws the tongue at `headTongueLength × 1.6` (3px → ~4.8px) at its peak — a visibly bigger "낼름" than the idle 3px tongue. This is the secondary differentiator (length, on top of duration). Kept under `2.0×` so the tongue still reads as a cute peek, never a lizard's full extension (the `--head-mouth: tongue-tip only` cozy rule: "cozy snakes don't gape"). Implemented as a peak — the simplest read is a single ease in-out over `tongueFlickDur` so the tongue extends and retracts once; a plain on-at-1.6× for the full duration is an acceptable cheaper fallback (still differentiated by the longer hold). |
+
+**Gating (no new color/shape, OR-combined with idle).** The tongue is drawn when `idleTongueVisible(now) OR flickActive(now)`. `flickActive` is true while `now - tongueFlickAt < tongueFlickDur`. During the flick window the tongue length is `headTongueLength × tongueFlickLengthScale` (ease in-out); outside it, idle draws the plain `headTongueLength`. This means: idle behavior is byte-for-byte unchanged when nothing was eaten; the flick simply *forces the tongue visible and longer* for 200ms after an eat, regardless of where the idle 1600ms cycle currently sits.
+
+**Trigger timestamp (dev note, not a STYLE token).** The flick fires on apple consumption. Reuse the existing `eatStart` (game.js:403, set on the eat tick) — `eatStart` and `tongueFlickAt` would always be set on the same tick, so a separate variable is only worth adding if the dev wants flick duration fully independent of squash duration. Since `tongueFlickDur`(200) ≠ `eatSquashDur`(180) here, a dedicated `tongueFlickAt` set to `performance.now()` alongside `eatStart`, and reset to `-Infinity` in `init()`, is the cleaner choice. **Designer is agnostic on this**; either satisfies the visual spec. PAUSED mid-flick self-resolves because the window is only 200ms (spec Set B).
+
+### Set C — yawn (장시간 직진 시 1회)
+
+A rare, gentle head stretch on long straight runs — the cozy answer to "단조로운 직진 구간에서도 살아있는 느낌." It reuses the head squash transform (the same `ctx.scale(... )` path as eat-squash, spec Decision D), so there is **no new draw pass and no new color**. The whole point is *저빈도* and *미세*: it must be the kind of thing a player notices once in a while and finds endearing, never a tic.
+
+| Token | 값 | 이유 |
+|---|---|---|
+| `yawnAfterMs` | `5000` | Midpoint of the planner-recommended `4000`–`6000ms`. Five seconds of unbroken straight travel before the snake "gets bored enough to yawn." On stage 1 (tick 220ms) that's ~22 cells of straight line — genuinely long, so the yawn only appears in sustained-corridor moments, not normal weaving play. Time-based (not tick-count) per Decision F so the *felt* straight-duration is identical across slow tutorial and fast stage 3. Below 4000 it would fire during ordinary play (annoying); above 6000 it becomes so rare players never see it (wasted motion). |
+| `yawnCooldownMs` | `8000` | Above the planner floor of `6000`. After a yawn, even uninterrupted straight travel cannot re-trigger for 8s. Generously above `yawnAfterMs`(5000) so the cadence is clearly "yawn → long calm → maybe another," never a rhythmic pulse. The asymmetry (8s cooldown > 5s trigger) guarantees the *minimum* gap between two yawns is `yawnAfterMs + yawnCooldownMs` = 13s of straight travel — comfortably in "occasional, cute" territory. |
+| `yawnDur` | `900ms` | One yawn's full ease-out→ease-in cycle. Much slower than eat-squash (180ms) on purpose: a yawn is a *languid* stretch, not a snappy bite. ~0.9s reads as a relaxed "하품" — slow open, slow settle. Tuned long enough to be legible as a distinct, sleepy motion but short enough that it's fully over before it could feel like the head is "stuck stretched." |
+| `yawnFacingScale` | `1.08` | Peak scale along the facing axis (head elongates forward), within the planner range `1.0`–`1.10`. `1.08` is a *subtle* 8% lengthening — visible as a gentle "stretch toward the horizon" but well short of a comedic gape. Deliberately below the eat-squash facing peak (`eatSquashX = 1.18`) so a yawn never looks as forceful as a bite — different motions, different intensities. |
+| `yawnPerpScale` | `0.96` | Peak scale across the facing axis (head narrows slightly), within range `1.0`–`0.95`. `0.96` paired with `1.08` keeps the product ≈ `1.037` — near area-preserving (same logic as `eatSquashX × eatSquashY ≈ 1.04`), so the head doesn't visibly *grow*, it *stretches*. The slight narrowing sells the "elongating" read of a yawn rather than a "puffing up." |
+
+**Easing & composition.** Yawn uses the same triangular ease-out→ease-in envelope as `computeSquash` (peak at the midpoint of `yawnDur`, scale 1.0 at both ends). Implementation mirrors `computeSquash` as a parallel `computeYawn(now)` returning `[yawnSx, yawnSy]`, multiplied into the existing head transform alongside `pulse` and the eat `[sx, sy]` (game.js:719). Because all three compose **multiplicatively**, the chosen yawn peaks are kept mild so a yawn coinciding with an eat-squash can't stack into a grotesque scale — worst-case facing product `1.18 × 1.08 = 1.27` is still a soft stretch, not a balloon. This overlap is rare (yawn needs 5s straight; eating breaks nothing but the two *can* coincide) and the designer signs off on it being acceptable; if it ever reads as too much, lower `yawnFacingScale` first.
+
+**Straight-run tracking (dev note, not a STYLE token).** Tracking which way the snake is going and how long it's gone straight is game-adjacent state, not a visual token, so it lives in dev's domain. Designer recommendation: a **time-based** `lastTurnAt` timestamp (reset whenever an applied `dir` actually changes heading), per Decision F, so the 5s threshold is felt consistently regardless of stage tick speed. Accumulate only in PLAYING; freeze in PAUSED/COUNTDOWN/STAGE_CLEAR/OVER/BLOCKED (a stopped snake is not "going straight"). Yawn is a pure render variation — it never touches head grid position, rotation, the v0.5.8 interpolation, collision, or score (spec Set C / Set E).
+
+### v0.5.9 토큰 요약 (확정값)
+
+| 파라미터 | 확정값 | 비고 |
+|---|---|---|
+| `wiggleAmpFactor` | `0.07` | was `0.15` — 절제 핵심 |
+| `wiggleFreqHz` | `1.5` | was `2.0` — 속도 절제 |
+| `wigglePhaseStep` | `Math.PI / 3` | 유지 (anti-sync) |
+| wiggle 진행-감쇠 | 신규 토큰 없음 | 기존 `s/bulgeMaxScale` 항 재사용 |
+| `tongueFlickDur` | `200` (ms) | idle 120ms 대비 길게 = 차별화 |
+| `tongueFlickLengthScale` | `1.6` | idle 3px 대비 ~4.8px = 차별화 |
+| `yawnAfterMs` | `5000` (ms) | 연속 직진 임계 |
+| `yawnCooldownMs` | `8000` (ms) | 재트리거 금지 구간 |
+| `yawnDur` | `900` (ms) | 1회 모션 지속(느린 하품) |
+| `yawnFacingScale` | `1.08` | facing축 peak (미세) |
+| `yawnPerpScale` | `0.96` | perp축 peak (면적 ≈ 보존) |
+
+**색/폰트 일관성.** 신규 색 0개, 신규 폰트 0개. flick은 `headTongueColor`(`#ef9aa6`) 재사용, yawn은 머리 squash 변형만(색 무관), wiggle은 토큰 값만 조정. 모든 변경이 기존 cozy 팔레트·기존 머리 톤 안에서 이루어져 톤 일관성이 유지된다.
+
+### dev 반영용 game.js TOKEN 키:값 목록
+
+```
+// --- 기존 토큰 값 변경 (v0.5.9 절제) ---
+wiggleAmpFactor: 0.07,   // was 0.15
+wiggleFreqHz: 1.5,       // was 2.0
+// wigglePhaseStep: Math.PI / 3,  // 변경 없음
+
+// --- v0.5.9 신규 토큰 (tongue flick) ---
+tongueFlickDur: 200,           // ms, idle 120ms보다 길게
+tongueFlickLengthScale: 1.6,   // headTongueLength * 1.6 peak
+
+// --- v0.5.9 신규 토큰 (yawn) ---
+yawnAfterMs: 5000,       // 연속 직진 임계
+yawnCooldownMs: 8000,    // 재트리거 쿨다운
+yawnDur: 900,            // 1회 모션 지속
+yawnFacingScale: 1.08,   // facing축 peak scale
+yawnPerpScale: 0.96,     // perp축 peak scale
+```
+
+신규 TOKEN 7개(flick 2 + yawn 5), 변경 2개. 직진 추적 상태(`lastTurnAt` 등)와 flick 트리거 타임스탬프(`tongueFlickAt` 또는 `eatStart` 재사용)는 TOKEN이 아닌 모듈 스코프 상태로 dev가 둔다.
