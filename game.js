@@ -117,11 +117,18 @@ const TOKEN = {
   countdownSkipColor: "#8a7460",
 };
 
+// v0.6.0 — spawnCount: 동시 스폰 과일 수, fruitMoves: 머리로 드리프트하는 이동 과일.
+// 미정의 필드는 코드에서 기본값(spawnCount=1, fruitMoves=false)으로 폴백한다(Decision G).
+// St3 fruitMoves=true는 라이브 검증용 잠정 플래그(Decision D), St7이 정식 엔드리스+이동.
 const STAGES = [
-  { id: "tutorial", label: "튜토리얼", cols: 5, rows: 5, tick: 420, snakeLen: 2, clearAfterApples: 3, noFailOnHit: true },
-  { id: 1,          label: "스테이지 1",  cols: 20, rows: 20, tick: 220, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
-  { id: 2,          label: "스테이지 2",  cols: 20, rows: 20, tick: 180, snakeLen: 3, clearAfterApples: 5, noFailOnHit: false },
-  { id: 3,          label: "스테이지 3",  cols: 20, rows: 20, tick: 150, snakeLen: 3, clearAfterApples: null, noFailOnHit: false },
+  { id: "tutorial", label: "튜토리얼", cols: 5,  rows: 5,  tick: 420, snakeLen: 2, clearAfterApples: 3,    spawnCount: 1,  fruitMoves: false, noFailOnHit: true  },
+  { id: 1,          label: "스테이지 1",  cols: 20, rows: 20, tick: 220, snakeLen: 3, clearAfterApples: 5,    spawnCount: 1,  fruitMoves: false, noFailOnHit: false },
+  { id: 2,          label: "스테이지 2",  cols: 20, rows: 20, tick: 180, snakeLen: 3, clearAfterApples: 5,    spawnCount: 1,  fruitMoves: false, noFailOnHit: false },
+  { id: 3,          label: "스테이지 3",  cols: 20, rows: 20, tick: 150, snakeLen: 3, clearAfterApples: 5,    spawnCount: 1,  fruitMoves: true,  noFailOnHit: false },
+  { id: 4,          label: "스테이지 4",  cols: 20, rows: 20, tick: 140, snakeLen: 3, clearAfterApples: 6,    spawnCount: 5,  fruitMoves: false, noFailOnHit: false },
+  { id: 5,          label: "스테이지 5",  cols: 20, rows: 20, tick: 130, snakeLen: 3, clearAfterApples: 8,    spawnCount: 10, fruitMoves: false, noFailOnHit: false },
+  { id: 6,          label: "스테이지 6",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: 10,   spawnCount: 10, fruitMoves: false, noFailOnHit: false },
+  { id: 7,          label: "스테이지 7",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: null, spawnCount: 10, fruitMoves: true,  noFailOnHit: false },
 ];
 
 // TODO 1 — STATE 2개 추가 + v0.5.7 HELP
@@ -163,8 +170,14 @@ let countdownStart = 0;
 
 let stageIndex;
 let stage;
-let snake, dir, nextDir, food, score, best, state;
+// v0.6.0 — single `food` generalized to `foods` array. Each element:
+// { x, y, px, py } where px/py is the previous grid cell for render interpolation
+// (moving fruit). Static fruit keeps px===x, py===y.
+let foods = [];
+let snake, dir, nextDir, score, best, state;
 let applesEaten;
+// v0.6.0 — moving-fruit drift timer (RAF dt accumulator; PLAYING only).
+let fruitMoveAccum = 0;
 let tickAccum = 0;
 let lastFrame = 0;
 let eatStart = -Infinity;
@@ -229,6 +242,7 @@ function loadStage(idx) {
   dir = { x: 1, y: 0 };
   nextDir = dir;
   tickAccum = 0;
+  fruitMoveAccum = 0; // v0.6.0 — reset moving-fruit drift timer per stage
   bulges.length = 0;
   // TODO 5 — reset hint state on stage load
   hintDismissed = false;
@@ -239,16 +253,45 @@ function loadStage(idx) {
   updateAuxButton();
 }
 
-function placeFood() {
-  while (true) {
-    const f = {
-      x: Math.floor(Math.random() * stage.cols),
-      y: Math.floor(Math.random() * stage.rows),
-    };
-    if (!snake.some((s) => s.x === f.x && s.y === f.y)) {
-      food = f;
-      return;
+// v0.6.0 — stage field accessors with safe defaults (Decision G).
+function stageSpawnCount() { return stage.spawnCount || 1; }   // 0/falsy -> 1
+function stageFruitMoves() { return stage.fruitMoves === true; }
+
+// v0.6.0 — collect grid cells occupied by neither the snake body nor existing fruit.
+// Empty-cell-list approach (not while(true) random retry) so a near-full board cannot
+// loop forever; worst case is one O(cols*rows) pass (Set C safety).
+function emptyCells() {
+  const occupied = new Set();
+  for (const s of snake) occupied.add(s.y * stage.cols + s.x);
+  for (const f of foods) occupied.add(f.y * stage.cols + f.x);
+  const cells = [];
+  for (let y = 0; y < stage.rows; y++) {
+    for (let x = 0; x < stage.cols; x++) {
+      if (!occupied.has(y * stage.cols + x)) cells.push({ x, y });
     }
+  }
+  return cells;
+}
+
+// v0.6.0 — spawn one fruit on a random empty cell. Returns true if placed, false if
+// the board has no free cell (safe no-op, no crash/hang). Each new fruit starts with
+// px/py === x/y so it renders static until it first moves.
+function spawnFood() {
+  const cells = emptyCells();
+  if (cells.length === 0) return false;
+  const c = cells[Math.floor(Math.random() * cells.length)];
+  foods.push({ x: c.x, y: c.y, px: c.x, py: c.y });
+  return true;
+}
+
+// v0.6.0 — (re)fill the board to stageSpawnCount() fruits. Clears existing fruit first,
+// then spawns up to spawnCount on distinct empty cells. If the board lacks enough empty
+// cells, spawns as many as fit and skips the rest (no infinite loop).
+function placeFood() {
+  foods = [];
+  const want = stageSpawnCount();
+  for (let i = 0; i < want; i++) {
+    if (!spawnFood()) break; // board full — stop safely
   }
 }
 
@@ -416,7 +459,13 @@ function tick() {
   }
 
   snake.unshift(head);
-  if (head.x === food.x && head.y === food.y) {
+  // v0.6.0 — multi-fruit eat: find the first fruit on the head cell (at most one per
+  // tick — even if two fruits share the head cell, only one is eaten; the rest wait
+  // for the next tick, keeping the bulge/growth +1 invariant). Eating effects remain
+  // the sole responsibility of tick() (planner risk #3): fruit drift never eats/grows.
+  const eatIdx = foods.findIndex((f) => f.x === head.x && f.y === head.y);
+  if (eatIdx !== -1) {
+    foods.splice(eatIdx, 1); // remove the eaten fruit
     score += 10;
     applesEaten += 1;
     updateHud();
@@ -433,12 +482,47 @@ function tick() {
       bulges[bi].spawnLen += 1;
     }
     spawnBulge();
+    // Clear judged on cumulative applesEaten (Set D). On clear, skip respawn — the
+    // stage transitions immediately so a fresh fruit would be a ghost (planner risk #3).
     if (stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
       return enterStageClear();
     }
-    placeFood();
+    // respawn: keep the board at spawnCount fruits (safe no-op if board is full).
+    spawnFood();
   } else {
     snake.pop();
+  }
+}
+
+// v0.6.0 — moving fruit. Drift interval ≈ stage.tick * 4 (snake 4 ticks per fruit cell)
+// so fruit creeps noticeably slower than the snake (Open Q resolved: tick*4).
+function fruitMoveMs() { return stage.tick * 4; }
+
+// v0.6.0 — advance moving fruit one grid step toward the head (greedy Manhattan, 1 axis).
+// PLAYING-only (gated by caller). px/py snapshot the pre-move cell for render interp.
+// IMPORTANT: this only changes fruit *position* — never eats/grows/scores. If a fruit
+// drifts onto a stationary head, the eat is consumed by the next tick()'s eat path
+// (≤1 tick delay, imperceptible), preserving the v0.5.8 prevSnake invariant.
+function moveFruits() {
+  const head = snake[0];
+  for (const f of foods) {
+    f.px = f.x;
+    f.py = f.y;
+    const dx = head.x - f.x;
+    const dy = head.y - f.y;
+    if (dx === 0 && dy === 0) continue; // already on the head cell — eaten next tick
+    let nx = f.x;
+    let ny = f.y;
+    // Greedy: step along the axis with the larger |delta|. Tie (|dx|===|dy|) -> x-axis
+    // first (Decision: x priority). Body pass-through is harmless (no body collision).
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      nx += Math.sign(dx);
+    } else {
+      ny += Math.sign(dy);
+    }
+    // Board clamp (safety — greedy approach normally stays in-bounds).
+    f.x = Math.max(0, Math.min(stage.cols - 1, nx));
+    f.y = Math.max(0, Math.min(stage.rows - 1, ny));
   }
 }
 
@@ -800,9 +884,11 @@ function drawSnakeHead(head, direction, now) {
   ctx.restore();
 }
 
-function drawApple(cellX, cellY, now) {
+// v0.6.0 — cellX/cellY may be fractional (interpolated moving-fruit position).
+// phase (radians) offsets the wobble per fruit so multiple apples don't bob in sync.
+function drawApple(cellX, cellY, now, phase = 0) {
   const off = getStageOffset();
-  const wobble = Math.sin((now / TOKEN.wobblePeriod) * Math.PI * 2) * TOKEN.wobbleAmp;
+  const wobble = Math.sin((now / TOKEN.wobblePeriod) * Math.PI * 2 + phase) * TOKEN.wobbleAmp;
   const cx = off.x + cellX * cellSize + cellSize / 2;
   const cy = off.y + cellY * cellSize + cellSize / 2 + wobble;
   const r = cellSize * 0.42;
@@ -939,7 +1025,18 @@ function drawCountdown(now) {
 // draw order: background → apple → body → bulges → head → touch hint → countdown
 function draw(now) {
   drawBackground();
-  drawApple(food.x, food.y, now);
+  // v0.6.0 — multi-fruit: draw each fruit (drawApple reused, no new asset/color).
+  // Moving fruit lerps prev cell (px/py) → current cell (x/y) by fruitMoveAccum/stepMs,
+  // PLAYING only; otherwise pinned to the grid cell (v0.5.8 PLAYING-gating convention).
+  const interp = (state === STATE.PLAYING && stageFruitMoves())
+    ? Math.min(1, Math.max(0, fruitMoveAccum / fruitMoveMs()))
+    : 1;
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    const fx = f.px + (f.x - f.px) * interp;
+    const fy = f.py + (f.y - f.py) * interp;
+    drawApple(fx, fy, now, i * 0.7); // per-fruit wobble phase offset (anti-sync)
+  }
   drawSnakeBody(snake);
   drawBulges(now);
   drawSnakeHead(snake[0], dir, now);
@@ -978,6 +1075,19 @@ function frame(now) {
       tick();
       tickAccum -= stage.tick;
       if (state !== STATE.PLAYING) break;
+    }
+    // v0.6.0 — moving-fruit drift: separate dt accumulator, PLAYING only. One greedy
+    // grid step per fruitMoveMs(). Skip entirely on non-moving stages so fruitMoveAccum
+    // does not build up. Guard state again (tick() above may have left PLAYING).
+    if (state === STATE.PLAYING && stageFruitMoves()) {
+      fruitMoveAccum += dt;
+      const stepMs = fruitMoveMs();
+      while (fruitMoveAccum >= stepMs) {
+        moveFruits();
+        fruitMoveAccum -= stepMs;
+      }
+    } else {
+      fruitMoveAccum = 0;
     }
   } else if (state === STATE.STAGE_CLEAR) {
     if (now - stageClearAt >= STAGE_CLEAR_HOLD_MS) {
