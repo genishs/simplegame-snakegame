@@ -4,6 +4,39 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.6.0 — 2026-06-03
+
+**Theme:** 다중 과일 + 이동 과일 + 스테이지 St4~7 확장 (food → foods 배열 일반화).
+
+### Why
+
+기존 게임은 보드에 과일이 항상 1개·고정이었다. 후반 스테이지에 깊이를 더하기 위해 (1) 한 보드에 여러 과일을 동시에 띄워 "어느 걸 먼저 먹을지" 동선 계획의 재미를 주고, (2) 일부 스테이지에서 과일이 머리 쪽으로 천천히 드리프트하게 해 정적인 사냥이 아닌 살아 움직이는 먹이를 쫓는 긴장감을 만들고 싶었다. 동시에 스테이지를 St3 종착역에서 St7까지 확장해 진행 곡선을 늘렸다. 원 로드맵의 "풀보드 클리어"는 본 버전 범위에서 **보류**하고(Decision F), 과일 차원 확장과 스테이지 확장에 집중했다. v0.5.8 렌더 보간·v0.5.9 ambient는 회귀 없이 불변으로 유지한다.
+
+### What
+
+- **STAGES 확장 + 신규 필드**: 전 스테이지에 `spawnCount`(동시 스폰 수)·`fruitMoves`(이동 과일 플래그)를 명시. 코드 기본값 `spawnCount=1`/`fruitMoves=false`로 누락 폴백(Decision G). St4(clear 6, spawn 5) / St5(clear 8, spawn 10) / St6(clear 10, spawn 10) / St7(clear null=엔드리스, spawn 10, fruitMoves) 추가. **St3 유한화**: `clearAfterApples` `null → 5`, 엔드리스 종착역을 St3 → St7로 이전(Decision E). 튜토리얼 tick 420 불변, St1·St2 데이터 불변.
+- **food → foods 배열 리팩터(Decision A)**: 단일 `food` 객체를 `foods` 배열로 일반화(요소 `{ x, y, px, py }`, px/py는 이동 과일 렌더 보간용 이전 칸). `placeFood()`는 `foods`를 비운 뒤 `spawnCount`개를 채우고, **빈 칸 목록(emptyCells) 기반 선택**으로 기존 `while(true)` 랜덤 리트라이의 무한루프 위험을 제거(빈 칸 0이면 안전 종료). `spawnFood()`는 과일 1개 먹을 때마다 빈 칸 1개에 재스폰해 보드를 항상 `spawnCount`개로 유지.
+- **먹기 = tick() 단일 경로(planner 위험 #3 해소)**: 머리 새 칸이 `foods` 중 하나와 일치하면 그 과일 1개 제거·`score+10`·`applesEaten+1`·`eatStart`/`tongueFlickAt`·**bulge +1 인덱스 시프트 + spawnBulge** + 성장(unshift without pop). **tick당 최대 1개만** 먹어 bulge/성장 +1 불변 유지. 클리어 판정은 누적 `applesEaten` 기준. **클리어되는 먹기에서는 respawn 건너뜀**(유령 과일 방지). 과일 이동은 위치만 바꾸고 절대 먹기/성장/점수를 처리하지 않는다 — 정지한 머리로 드리프트해 닿아도 먹힘은 다음 tick에서 일어난다(지연 ≤1tick, 무감지). 이게 v0.5.8 prevSnake 불변식을 지키는 핵심.
+- **이동 과일(fruitMoves 스테이지)**: `moveFruits()`가 각 과일을 머리 향해 **맨해튼 그리디 1칸**(|dx|≥|dy|이면 x, 아니면 y; 동률 x우선) 이동. 보드 경계 클램프, **몸통 통과 무해**(충돌 없음). 기존 RAF `frame()` 루프 내 `fruitMoveAccum += dt` 누적으로 구동(새 타이머 없음), `fruitMoveMs = stage.tick * 4`마다 1칸(뱀 4틱당 1칸 = 느린 드리프트). **PLAYING에서만** 이동, 그 외 상태는 정지. 비-이동 스테이지에서는 `fruitMoveAccum` 동결.
+- **다중 과일 렌더(Set F)**: `draw()`가 `foods`를 순회하며 기존 `drawApple`를 N회 호출(**신규 색·폰트·에셋 0**). 이동 과일은 `px/py → x/y`를 `fruitMoveAccum/fruitMoveMs`로 lerp(PLAYING만, 그 외 격자 고정). 과일별 wobble phase 오프셋(`i*0.7`)으로 동기화 어색함 완화.
+- **메타/도움말**: VERSION 0.6.0, index.html v0.6.0. 도움말 카피의 v0.5.7 "스테이지 6부터 풀보드 클리어" 예고를 다중·이동 과일 안내로 교체(모순 제거). 클리어 규칙 카피를 엔드리스 마지막 스테이지 포함으로 갱신. README 로드맵 v0.6 행 재정의(풀보드 클리어 보류 명시).
+
+### Decisions
+
+- **(A) food → foods 배열 일반화** — 충돌·렌더·bulge 단일 진입점이 이미 한 곳에 모여 있어 배열 순회 치환 범위가 제한적.
+- **(D) St3 fruitMoves=true는 검증용 잠정 플래그** — 도달이 쉬운 St3에 이동 과일을 켜 라이브 검증 어포던스를 제공. **잠정**이며, 사용자 평가 후 향후 패치에서 St3 fruitMoves=false로 되돌릴 수 있음. St7은 정식(엔드리스+다중+이동).
+- **(E) 엔드리스 종착역 St3 → St7 이전**, **(F) 풀보드 클리어 보류**, **(G) 신규 필드 기본값 하위 호환** — spec Decisions 참조.
+- **Open Q 확정값**: 이동 속도 `fruitMoveMs = stage.tick * 4`(느린 드리프트 체감). 그리디 동률 시 **x축 우선**. 렌더 보간 **적용**(px/py lerp). 두 과일 동일 칸 겹침 **허용**(회피 미구현, 먹기는 tick당 1개라 중복 정산·크래시 없음). 먹힘 판정은 **tick() 단일 경로**에서 소비.
+
+### Verification
+
+- `node --check game.js` 구문 통과.
+- 로직 self-review: 단일 `food` 잔존 참조 0(grep), bulge +1 시프트 회귀 없음, `placeFood`/`spawnFood` 무한루프 불가(빈 칸 목록·빈 칸 0 안전 종료), 클리어 시 respawn 스킵(early-return), St3→St4 유한화 전환·St7 엔드리스, 이동 과일이 PLAYING 외 정지(`fruitMoveAccum` 동결·렌더 격자 고정), 먹기가 tick() 단일 경로.
+- **정적 검증 한계**: 이동 과일 드리프트 체감·렌더 부드러움은 라이브 플레이 검증 요망(특히 St3 잠정 플래그로 빠른 도달 검증).
+- 페이로드 실측: PR 본문 참조(상한 75KB).
+
+---
+
 ## v0.5.9 — 2026-06-03
 
 **Theme:** 소화 wiggle 절제 + 머리 ambient(혀 낼름·하품) 추가.
