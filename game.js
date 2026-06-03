@@ -90,10 +90,19 @@ const TOKEN = {
   bulgeFill: "#d76461",
   bulgeAspect: 1.15,
   bulgeWidthCapFactor: 0.86 * 0.95, // actual = cellSize * factor
-  // v0.5.7 wiggle tokens
-  wiggleAmpFactor: 0.15,    // amplitude = cellSize * 0.15
-  wiggleFreqHz: 2.0,
-  wigglePhaseStep: Math.PI / 3,
+  // v0.5.7 wiggle tokens (v0.5.9: 절제 — 토큰 값만 하향, drawBulges 구조 불변)
+  wiggleAmpFactor: 0.07,    // was 0.15 — amplitude = cellSize * 0.07 (~1.4px peak)
+  wiggleFreqHz: 1.5,        // was 2.0 — 속도 절제 (full cycle 667ms)
+  wigglePhaseStep: Math.PI / 3, // 유지 (anti-sync), 절제 대상 아님
+  // v0.5.9 tongue flick tokens (idle headTongue* 재사용, 신규 색 없음)
+  tongueFlickDur: 200,           // ms — idle 120ms보다 길게 = 차별화
+  tongueFlickLengthScale: 1.6,   // headTongueLength * 1.6 peak (~4.8px)
+  // v0.5.9 yawn tokens (머리 squash 변형 재사용, 신규 색 없음)
+  yawnAfterMs: 5000,       // 연속 직진 임계
+  yawnCooldownMs: 8000,    // 재트리거 쿨다운
+  yawnDur: 900,            // 1회 모션 지속(느린 하품)
+  yawnFacingScale: 1.08,   // facing축 peak scale (미세)
+  yawnPerpScale: 0.96,     // perp축 peak scale (면적 ≈ 보존)
   // TODO 2 — v0.5.6 countdown tokens
   countdownMaskColor: "#3b2a1a",
   countdownMaskAlpha: 0.35,
@@ -161,6 +170,11 @@ let lastFrame = 0;
 let eatStart = -Infinity;
 let stageClearAt = 0;
 
+// v0.5.9 head ambient state (render-only; never affects logic/collision/score)
+let tongueFlickAt = -Infinity; // timestamp of last apple-eat tongue flick
+let lastTurnAt = -Infinity;    // timestamp of last applied heading change (straight-run anchor)
+let yawnAt = -Infinity;        // timestamp of last yawn trigger (drives duration + cooldown)
+
 // v0.5.8 — render-only tween: prevSnake snapshots grid positions before tick()
 // mutates snake; renderT is the [0,1] progress within the tick (PLAYING only).
 let prevSnake = [];
@@ -179,6 +193,10 @@ function init() {
   state = STATE.READY;
   tickAccum = 0;
   eatStart = -Infinity;
+  // v0.5.9 — reset head ambient state
+  tongueFlickAt = -Infinity;
+  lastTurnAt = -Infinity;
+  yawnAt = -Infinity;
   bulges.length = 0;
   // TODO 5 — reset hint state
   hintDismissed = false;
@@ -387,6 +405,8 @@ function finishCountdown() {
 
 function tick() {
   snapshotSnake(); // v0.5.8 — capture pre-move grid positions for the render tween
+  // v0.5.9 — anchor straight-run tracking when heading actually changes (yawn input)
+  if (nextDir.x !== dir.x || nextDir.y !== dir.y) lastTurnAt = performance.now();
   dir = nextDir;
   const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
 
@@ -401,6 +421,7 @@ function tick() {
     applesEaten += 1;
     updateHud();
     eatStart = performance.now();
+    tongueFlickAt = eatStart; // v0.5.9 — fire a one-shot tongue flick on eat
     // v0.5.7.2 (Issue #14): eating grows the snake (unshift without pop), so every
     // existing segment index shifts +1. Bulge progress lives in index space, so
     // shift each existing bulge +1 to keep tracking the same absolute segment
@@ -636,6 +657,19 @@ function computeSquash(now) {
   return [sx, sy];
 }
 
+// v0.5.9 computeYawn: returns [yawnSx, yawnSy] facing/perp scale for one yawn.
+// Same triangular ease-out→ease-in envelope as computeSquash (peak at midpoint,
+// 1.0 at both ends), over yawnDur. Pure render variation — facing axis = +x.
+function computeYawn(now) {
+  const since = now - yawnAt;
+  if (since < 0 || since >= TOKEN.yawnDur) return [1.0, 1.0];
+  const t = since / TOKEN.yawnDur;
+  const tri = t < 0.5 ? t * 2 : (1 - t) * 2;
+  const sx = 1 + (TOKEN.yawnFacingScale - 1) * tri;
+  const sy = 1 + (TOKEN.yawnPerpScale - 1) * tri;
+  return [sx, sy];
+}
+
 // drawSnakeBody: draws body segments [1..len-1] as a single capsule stroke
 // Uses module-scope cellCenterX / cellCenterY helpers (Task 1)
 function drawSnakeBody(snakeArr) {
@@ -707,6 +741,7 @@ function drawSnakeHead(head, direction, now) {
 
   const pulse = computePulse(now);
   const [sx, sy] = computeSquash(now);
+  const [yx, yy] = computeYawn(now); // v0.5.9 — yawn stretch, composed multiplicatively
 
   const headLength = cellSize * TOKEN.headLengthFactor;
   const headWidth  = cellSize * TOKEN.headWidthFactor;
@@ -716,7 +751,8 @@ function drawSnakeHead(head, direction, now) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(angleFromDir(direction));
-  ctx.scale(pulse * sx, pulse * sy);
+  // facing axis = local +x (post-rotate), so yawn facing scale multiplies x.
+  ctx.scale(pulse * sx * yx, pulse * sy * yy);
 
   const hl = headLength / 2;  // half-length (facing axis radius)
   const hw = headWidth / 2;   // half-width (perpendicular axis radius)
@@ -741,11 +777,23 @@ function drawSnakeHead(head, direction, now) {
   ctx.beginPath(); ctx.arc(ef, -es, pupilR, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(ef,  es, pupilR, 0, Math.PI * 2); ctx.fill();
 
-  // Tongue: visible for headTongueOn ms out of every headTonguePeriod ms
-  if (now % TOKEN.headTonguePeriod < TOKEN.headTongueOn) {
+  // Tongue: idle flicker (headTongueOn ms out of every headTonguePeriod ms) OR
+  // v0.5.9 flick — forced visible & longer for tongueFlickDur ms after an eat.
+  // Same color/shape/draw path as idle (no new token color), only length differs.
+  const flickSince = now - tongueFlickAt;
+  const flicking = flickSince >= 0 && flickSince < TOKEN.tongueFlickDur;
+  const idleTongue = now % TOKEN.headTonguePeriod < TOKEN.headTongueOn;
+  if (flicking || idleTongue) {
+    let tongueLen = TOKEN.headTongueLength;
+    if (flicking) {
+      // ease in-out over the flick window: extend to *tongueFlickLengthScale then back
+      const ft = flickSince / TOKEN.tongueFlickDur;
+      const tri = ft < 0.5 ? ft * 2 : (1 - ft) * 2;
+      tongueLen = TOKEN.headTongueLength * (1 + (TOKEN.tongueFlickLengthScale - 1) * tri);
+    }
     ctx.fillStyle = TOKEN.headTongueColor;
     ctx.beginPath();
-    ctx.ellipse(hl + TOKEN.headTongueLength / 2, 0, TOKEN.headTongueLength / 2, 1.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(hl + tongueLen / 2, 0, tongueLen / 2, 1.2, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -907,8 +955,22 @@ function frame(now) {
 
   // v0.5.8 — seed prevSnake on every transition into PLAYING so the first partial
   // tick renders static (lerp(snake,snake,t)) rather than from a stale snapshot.
-  if (state === STATE.PLAYING && prevState !== STATE.PLAYING) snapshotSnake();
+  if (state === STATE.PLAYING && prevState !== STATE.PLAYING) {
+    snapshotSnake();
+    // v0.5.9 — re-anchor straight-run on every PLAYING entry (fresh start, countdown
+    // end, pause resume, unblock) so time spent stopped never counts toward a yawn.
+    lastTurnAt = now;
+  }
   prevState = state;
+
+  // v0.5.9 — yawn trigger: PLAYING only. After yawnAfterMs of unbroken straight
+  // travel, fire one yawn; cooldown (yawnCooldownMs from the last yawn) blocks
+  // re-trigger. Pure render state — never touches logic/collision/score.
+  if (state === STATE.PLAYING
+      && now - lastTurnAt >= TOKEN.yawnAfterMs
+      && now - yawnAt >= TOKEN.yawnCooldownMs) {
+    yawnAt = now;
+  }
 
   if (state === STATE.PLAYING) {
     tickAccum += dt;
@@ -951,6 +1013,9 @@ function tryUnblock(dx, dy) {
   nextDir = { x: dx, y: dy };
   if (!isSafeDir(dx, dy)) return;
   dir = nextDir;
+  // v0.5.9 — resuming from BLOCKED restarts the straight run from now (a stopped
+  // snake was not "going straight"); anchor so yawn timing stays consistent.
+  lastTurnAt = performance.now();
   state = STATE.PLAYING; tickAccum = 0; hideOverlay();
   updateAuxButton();
 }
