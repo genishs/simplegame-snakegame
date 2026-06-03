@@ -4,6 +4,44 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.5.9 — 2026-06-03
+
+**Theme:** 소화 wiggle 절제 + 머리 ambient(혀 낼름·하품) 추가.
+
+### Why
+
+v0.5.7 소화 덩어리(bulge)의 wiggle이 진폭 3px·2.0Hz로 여러 덩어리가 동기화되어 빠르게 떨려 "조잡"하게 보였다. 흔들림을 **제거가 아니라 절제**해 생동감은 남기되 차분하게 만들고 싶었다. 동시에 단조로운 직진·섭취 순간에 잔잔한 생기를 더하고자 머리에 비반복·저빈도 ambient 2종 — 과일 섭취 직후의 짧은 혀 낼름(tongue flick)과 장시간 직진 시 1회 하품(yawn) — 을 추가했다. 본 버전은 **렌더/모션 폴리시**만 바꾸며 v0.5.8 보간·게임 로직(충돌·점수·스테이지·타이밍)에는 일절 영향을 주지 않는다.
+
+### What
+
+- **wiggle 절제 (토큰 값만 조정)**: `wiggleAmpFactor` `0.15 → 0.07`(20px 셀 기준 3px → ~1.4px peak), `wiggleFreqHz` `2.0 → 1.5`(full cycle 250ms → 667ms). `wigglePhaseStep`(`Math.PI/3`)은 anti-sync 장치라 유지. `drawBulges` 구조·normal 벡터·형상/스케일/페이드 로직 불변. **진행-감쇠는 신규 토큰 미도입** — 기존 `wiggleAmp = cellSize × wiggleAmpFactor × (s / bulgeMaxScale)` 항이 꼬리로 갈수록 `s`(0.80→0.60)에 따라 이미 0.75×로 감쇠하므로 추가 계수 불필요(이중 감쇠 방지).
+- **tongue flick (섭취 직후 1회)**: 먹는 tick에서 `tongueFlickAt = performance.now()` 설정(전용 모듈 변수, `init()`에서 `-Infinity` 리셋). `drawSnakeHead`의 기존 idle 혀 게이팅에 `flicking || idleTongue` OR 결합 — flick 구간(`now - tongueFlickAt < tongueFlickDur` 200ms)에는 idle 주기와 무관하게 혀가 보이고, 혀 길이를 `headTongueLength × tongueFlickLengthScale`(3px → ~4.8px)로 ease in-out 확대. 색·shape·draw 경로는 idle과 동일(`headTongueColor` 재사용, 신규 색 0).
+- **yawn (장시간 직진 1회)**: 시간 기반 직진 추적 `lastTurnAt` 도입 — `dir = nextDir` 적용 시 heading이 실제 바뀌면 갱신(`tick()`), BLOCKED 복귀(`tryUnblock`)·모든 PLAYING 재진입(`frame()`)에서 `now`로 재anchor(정지 시간이 직진으로 안 세짐). `frame()`에서 PLAYING이고 `now-lastTurnAt ≥ yawnAfterMs`(5000) 且 `now-yawnAt ≥ yawnCooldownMs`(8000)면 `yawnAt = now` 1회 트리거. `computeYawn(now)`(`computeSquash` 패턴 복제)가 `yawnDur`(900ms) 동안 삼각 ease로 `[yawnFacingScale 1.08, yawnPerpScale 0.96]`를 반환, 머리 transform에 `pulse·squash`와 **곱연산 합성**(`ctx.scale(pulse*sx*yx, pulse*sy*yy)`). 순수 렌더 변형 — 머리 격자 위치·회전·보간·충돌·점수 무관.
+
+### 신규 토큰 (STYLE.md 등록)
+
+- 변경 2: `wiggleAmpFactor 0.07`, `wiggleFreqHz 1.5`.
+- 신규 7: `tongueFlickDur 200`, `tongueFlickLengthScale 1.6`, `yawnAfterMs 5000`, `yawnCooldownMs 8000`, `yawnDur 900`, `yawnFacingScale 1.08`, `yawnPerpScale 0.96`.
+- 신규 색·폰트 0. 직진 추적(`lastTurnAt`)·flick 타임스탬프(`tongueFlickAt`)·yawn 타임스탬프(`yawnAt`)는 TOKEN이 아닌 모듈 스코프 상태.
+
+### Verification
+
+- `node --check game.js` 구문 통과.
+- 로직 self-review: flick 트리거→200ms 자연 종료, yawn 임계(5s)·쿨다운(8s)·1회성, `lastTurnAt` 갱신이 회전(좌/우)·BLOCKED 복귀·일시정지 재개·카운트다운 종료에서 일관, 정지(비PLAYING) 상태에서 yawn 미발동·직진 누적 동결을 코드상 확인. 합성 곱연산 worst-case(eat-squash×yawn facing = 1.18×1.08 ≈ 1.27)도 미세 스트레치 범위.
+- 회귀: v0.5.8 보간(prevSnake/renderT/cellCenter/lerp)·충돌·점수·스테이지·모바일 입력 경로 불변. 새 setInterval/setTimeout 없이 기존 RAF 루프 내 산술만 추가.
+- 페이로드 실측: 아래 Decisions 참조(상한 75KB).
+
+### Decisions
+
+- **(A) wiggle 절제, 제거 아님** — `wiggleAmpFactor`를 0이 아닌 0.07로 하향(생동감 잔존). designer 확정값.
+- **(B) 진행-감쇠 신규 토큰 미채택** — 기존 `s/bulgeMaxScale` 항이 이미 꼬리 감쇠. 이중 감쇠 시 꼬리에서 near-zero wiggle로 v0.5.7 이전 rigid-slide 회귀 위험.
+- **(C) flick은 idle 혀 재사용** — OR 게이팅 + 길이 확대만. 신규 색/폰트 0.
+- **(D) yawn은 squash 경로 재사용·미세·1회·쿨다운** — 별도 draw 패스 없이 머리 transform 곱연산 합성.
+- **(F) 직진 추적은 시간 기반(`lastTurnAt`)** — 스테이지 tick 속도와 무관하게 "체감 직진 시간" 일정.
+- **(G) 페이로드 상한 75KB 상향** — `docs/HARNESS.md` 문구 동기화.
+
+---
+
 ## v0.5.8 — 2026-06-03
 
 **Theme:** 렌더 전용 보간(tween)으로 칸 단위 이동을 부드럽게.

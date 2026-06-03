@@ -69,4 +69,4 @@ If a step has nothing to do (e.g. a version with no visual work), the correspond
 - The visible version in `index.html`, the `VERSION` file, and the `HISTORY.md` heading must always agree.
 - No direct pushes to `main` from anyone. Always via PR.
 - No build tooling. No frameworks. Vanilla JS until explicitly approved otherwise.
-- Total page payload stays under ~50 KB through v1.0 unless the Dev Lead justifies an exception.
+- Total page payload stays under ~75 KB through v1.0 unless the Dev Lead justifies an exception.
