@@ -103,7 +103,8 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.5.7 | UI scaling, difficulty curve, Korean UI, wiggle, help screen | ✅ |
 | v0.5.8 | Smooth movement via render-only tween interpolation | ✅ |
 | v0.5.9 | Calmer digestion wiggle + head ambient (tongue flick, yawn) | ✅ |
-| v0.6.0 | 다중·이동 과일 + 스테이지 St4~7 확장 (St7 엔드리스) | 🚧 |
+| v0.6.0 | 다중·이동 과일 + 스테이지 St4~7 확장 (St7 엔드리스) | ✅ |
+| v0.6.1 | 이동 과일 먹기 버그 수정 (swap pass-through) | ✅ |
 | v0.6+ | Full-board clear mechanic (보류 — 향후) | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 
