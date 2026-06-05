@@ -451,7 +451,8 @@ function tick() {
   // v0.5.9 — anchor straight-run tracking when heading actually changes (yawn input)
   if (nextDir.x !== dir.x || nextDir.y !== dir.y) lastTurnAt = performance.now();
   dir = nextDir;
-  const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+  const prevHead = snake[0]; // v0.6.1 — head cell about to be vacated (for swap eat)
+  const head = { x: prevHead.x + dir.x, y: prevHead.y + dir.y };
 
   if (wouldHit(head)) {
     if (stage.noFailOnHit) return enterBlocked();
@@ -463,7 +464,17 @@ function tick() {
   // tick — even if two fruits share the head cell, only one is eaten; the rest wait
   // for the next tick, keeping the bulge/growth +1 invariant). Eating effects remain
   // the sole responsibility of tick() (planner risk #3): fruit drift never eats/grows.
-  const eatIdx = foods.findIndex((f) => f.x === head.x && f.y === head.y);
+  let eatIdx = foods.findIndex((f) => f.x === head.x && f.y === head.y);
+  // v0.6.1 — pass-through eat fix. Moving fruit drifts on its own timer while the head
+  // ticks 4× faster, so a fruit moving toward the head can swap cells with it (head
+  // takes the fruit's old cell as the fruit takes the head's) and they never share a
+  // cell at a tick boundary — the fruit slips behind the head and, being slower, can
+  // never catch up, becoming uneatable. Treat a fruit on the head's just-vacated cell
+  // (prevHead) as eaten too: that fruit met the head's path this tick. Harmless on
+  // non-moving stages (spawnFood never places a fruit on an occupied body cell).
+  if (eatIdx === -1) {
+    eatIdx = foods.findIndex((f) => f.x === prevHead.x && f.y === prevHead.y);
+  }
   if (eatIdx !== -1) {
     foods.splice(eatIdx, 1); // remove the eaten fruit
     score += 10;
