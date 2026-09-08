@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FDF6EC"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- faint board grid, echoing the in-game canvas, kept inside the safe zone -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#0F785A3C"
+        android:strokeWidth="1"
+        android:pathData="M18,36 L90,36 M18,54 L90,54 M18,72 L90,72 M36,18 L36,90 M54,18 L54,90 M72,18 L72,90" />
+</vector>

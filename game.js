@@ -1,3 +1,7 @@
+// v0.6.1 — Android shell SoT: android/build.gradle.kts parses this to derive
+// versionName/versionCode. Web behavior is unaffected (unused constant).
+const GAME_VERSION = '0.6.1';
+
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
@@ -327,6 +331,8 @@ function pause() {
 }
 
 function gameOver() {
+  // v0.6.1 — Android shell haptic bridge (no-op in a plain browser).
+  if (typeof Android !== "undefined" && Android.vibrate) Android.vibrate(100);
   state = STATE.OVER;
   bulges.length = 0;
   if (score > best) {
@@ -482,6 +488,8 @@ function tick() {
     updateHud();
     eatStart = performance.now();
     tongueFlickAt = eatStart; // v0.5.9 — fire a one-shot tongue flick on eat
+    // v0.6.1 — Android shell haptic bridge (no-op in a plain browser).
+    if (typeof Android !== "undefined" && Android.vibrate) Android.vibrate(20);
     // v0.5.7.2 (Issue #14): eating grows the snake (unshift without pop), so every
     // existing segment index shifts +1. Bulge progress lives in index space, so
     // shift each existing bulge +1 to keep tracking the same absolute segment

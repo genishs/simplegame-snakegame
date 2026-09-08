@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Coiled snake body — S-curve stroke, same green as the in-game snake body. -->
+    <path
+        android:pathData="M30,86 C30,64 78,70 78,50 C78,30 30,36 30,18"
+        android:strokeColor="#7CC47C"
+        android:strokeWidth="15"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+
+    <!-- Head -->
+    <path
+        android:pathData="M30,18 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0"
+        android:fillColor="#6BB96B" />
+
+    <!-- Eyes -->
+    <path android:pathData="M26,15 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#FFFFFF" />
+    <path android:pathData="M34,15 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#FFFFFF" />
+    <path android:pathData="M26,15 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0" android:fillColor="#2A2018" />
+    <path android:pathData="M34,15 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0" android:fillColor="#2A2018" />
+
+    <!-- Apple, near the tail end, same palette as the in-game fruit. -->
+    <path android:pathData="M77,52 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" android:fillColor="#EF6F6C" />
+    <path android:pathData="M84,44 c3,-2 6,0 5,3 c-1,2 -4,1 -5,-1 z" android:fillColor="#7AC74F" />
+    <path android:pathData="M76,42 l1.5,-4 l1.5,4 z" android:fillColor="#5D3A1C" />
+</vector>

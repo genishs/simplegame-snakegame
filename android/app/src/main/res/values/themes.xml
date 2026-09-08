@@ -1,0 +1,17 @@
+<resources>
+    <style name="Theme.SnakeGame" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/bg_page</item>
+        <item name="colorPrimary">@color/accent_orange</item>
+        <item name="colorPrimaryDark">@color/accent_orange</item>
+        <item name="colorAccent">@color/snake_body</item>
+        <item name="android:statusBarColor">@color/bg_page</item>
+        <item name="android:navigationBarColor">@color/bg_page</item>
+    </style>
+
+    <!-- Simple themed splash: page-background color + launcher icon, per v1 spec. -->
+    <style name="Theme.SnakeGame.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/bg_page</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.SnakeGame</item>
+    </style>
+</resources>
