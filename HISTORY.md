@@ -4,6 +4,32 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## Android v1 — 2026-09-08
+
+**Theme:** 안드로이드 앱 셸 (A안: 순수 WebView + assets 내장) + 모노레포.
+
+### Why
+
+Play Store 배포를 위해 팀 회의에서 A안(네이티브 재구현 없이 웹 3파일을 WebView로 감싸기) + 모노레포(별도 레포 대신 이 레포 루트에 `android/`)로 만장일치 결정했다. 게임 로직의 단일 진실원은 계속 루트의 `index.html`/`game.js`/`style.css`로 유지한다.
+
+### What
+
+- **`android/` Gradle 모듈 추가** (`applicationId`/`namespace` = `com.sgshs.simplegame.snakegame`, minSdk 26, compileSdk/targetSdk 36). `docs/specs/android-v1.md` 참조.
+- **버전 동기화**: `game.js` 최상단에 `const GAME_VERSION = '0.6.1';` 추가(SoT). Gradle이 이를 정규식 파싱해 `versionName`/`versionCode`(0.6.1 → 601)를 도출 — 파싱 실패 시 빌드 실패.
+- **웹 자산은 커밋하지 않음**: `copyWebAssets` Gradle Copy 태스크가 빌드 시점에 루트 3파일을 `build/generated/webAssets`로 복사해 `assets` sourceSet에 편입.
+- **MainActivity**: `WebViewAssetLoader`로 `https://appassets.androidplatform.net/assets/index.html` 로드, `domStorageEnabled`(최고점수 유지), 몰입형 전체화면(`WindowInsetsControllerCompat`), 뒤로가기는 `game.js`의 기존 `pause()`를 `evaluateJavascript`로 호출(재생 중일 때), `Android.vibrate(ms)` JS 브릿지(진동 권한만 요청).
+- **game.js 웹측 변경(최소)**: `GAME_VERSION` 상수 + 과일 먹기(20ms)·게임오버(100ms) 지점에 `Android.vibrate` 가드 호출 2줄. 일반 브라우저에서는 무동작.
+- **에지투에지**: `index.html`의 `viewport-fit=cover`, `style.css`의 `env(safe-area-inset-bottom)`가 이미 있어 추가 변경 없음.
+- 뱀 테마 어댑티브 아이콘(벡터 직접 제작), 단순 테마 스플래시, `~/keystores/sgshs-upload.jks` 서명(dday-sgshs와 동일 패턴).
+- 개인정보처리방침: `genishs/adrddday-privacy` 레포에 `docs/snakegame-privacy.html` 추가·게시.
+
+### 검증
+
+- `./gradlew bundleRelease assembleRelease` 성공, `aapt2 dump badging`으로 package/versionCode 601/versionName 0.6.1/minSdk 26/targetSdk 36/권한(VIBRATE만 명시) 확인.
+- Pixel_6 AVD에 릴리스 APK 설치 후 스모크: 렌더링, 터치 조작(회전 버튼), 벽 충돌 게임오버, 과일 섭취(점수/소화 bulge 애니메이션), 일시정지, 몰입형 전체화면, 모바일 컨트롤이 하단 제스처 영역에 가려지지 않음 — 모두 정상.
+
+---
+
 ## v0.6.1 — 2026-06-05
 
 **Theme:** 이동 과일 먹기 버그 수정 (pass-through eat fix).
