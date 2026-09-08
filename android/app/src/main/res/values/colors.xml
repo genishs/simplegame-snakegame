@@ -1,0 +1,9 @@
+<resources>
+    <!-- Mirrors the game's TOKEN palette (game.js) so the native shell (splash,
+         icon, status bar) reads as the same game, not a bare WebView wrapper. -->
+    <color name="bg_page">#FDF6EC</color>
+    <color name="snake_body">#7CC47C</color>
+    <color name="snake_head">#6BB96B</color>
+    <color name="accent_orange">#F4A261</color>
+    <color name="apple_body">#EF6F6C</color>
+</resources>
