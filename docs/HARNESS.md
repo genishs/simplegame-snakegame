@@ -23,7 +23,7 @@ Two reasons:
 | | Responsibility |
 |---|---|
 | **`dev-lead`** | Decides *how* features are implemented. Sketches the implementation plan before code is written. Reviews the developer's branch with line-level feedback. Enforces architecture rules (no build step, vanilla JS, payload budget). |
-| **`developer`** | Implements on a `feature/v0.X-<slug>` branch. Updates `VERSION`, the in-page version string, and `HISTORY.md` as part of the work. Opens a PR; never merges to `main`. |
+| **`developer`** | Implements on a `feature/v0.X-<slug>` branch. Updates `GAME_VERSION` in `game.js` and `HISTORY.md` as part of the work. Opens a PR; never merges to `main`. |
 
 ### Design
 
@@ -66,7 +66,7 @@ If a step has nothing to do (e.g. a version with no visual work), the correspond
 ## Standing rules (everyone honors)
 
 - **Stages 1–3 must feel very easy.** Real difficulty only ramps from stage 4. This is a user-set design rule; do not override.
-- The visible version in `index.html`, the `VERSION` file, and the `HISTORY.md` heading must always agree.
+- `GAME_VERSION` in `game.js` is the only place the version is written (the page label and the Android version are derived from it); the `HISTORY.md` heading must agree with it.
 - No direct pushes to `main` from anyone. Always via PR.
 - No build tooling. No frameworks. Vanilla JS until explicitly approved otherwise.
 - Total page payload stays under ~75 KB through v1.0 unless the Dev Lead justifies an exception.

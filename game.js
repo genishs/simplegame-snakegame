@@ -1,6 +1,10 @@
-// v0.6.1 — Android shell SoT: android/build.gradle.kts parses this to derive
-// versionName/versionCode. Web behavior is unaffected (unused constant).
-const GAME_VERSION = '0.6.1';
+// Single source of truth for the version (issue #26). The page's version label is
+// filled from this, and android/app/build.gradle.kts parses this exact line to
+// derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
+const GAME_VERSION = '0.6.2';
+
+const versionEl = document.getElementById("version");
+if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
@@ -197,6 +201,7 @@ let yawnAt = -Infinity;        // timestamp of last yawn trigger (drives duratio
 let prevSnake = [];
 let renderT = 0;
 let prevState = null;
+let hostKeepAwake = null; // v0.6.2 (#28) — last value sent to Android.setKeepScreenOn
 
 function snapshotSnake() {
   prevSnake = snake.map((s) => ({ x: s.x, y: s.y }));
@@ -222,7 +227,10 @@ function init() {
   loadStage(stageIndex);
   resizeCanvas();
   updateHud();
-  showOverlay("스페이스바로 시작", "← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작");
+  showOverlay(
+    uiText("스페이스바로 시작", "화면을 탭해서 시작"),
+    uiText("← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작", "회전 버튼이나 화면 왼쪽·오른쪽 탭 — 회전"),
+  );
   updateAuxButton();
   // v0.5.7 — auto-show help on first visit
   try {
@@ -305,6 +313,21 @@ function updateHud() {
   stageEl.textContent = stage.label;
 }
 
+// v0.6.2 (#25) — touch-first devices (phones, tablets, the Android app) get touch
+// wording instead of keyboard instructions. A MediaQueryList's `matches` is live, so a
+// tablet that gains a mouse/keyboard as its primary pointer follows along.
+const coarsePointerMq = typeof window.matchMedia === "function"
+  ? window.matchMedia("(pointer: coarse)")
+  : null;
+
+function isTouchUi() {
+  return !!(coarsePointerMq && coarsePointerMq.matches);
+}
+
+function uiText(keyboard, touch) {
+  return isTouchUi() ? touch : keyboard;
+}
+
 function showOverlay(title, msg) {
   overlayTitle.textContent = title;
   overlayMsg.textContent = msg;
@@ -324,10 +347,33 @@ function start() {
 }
 
 function pause() {
-  if (state !== STATE.PLAYING) return;
+  // v0.6.2 (#22) — COUNTDOWN can pause too: it runs on wall-clock time, so leaving it
+  // running while the page is hidden would finish it unseen and start play on return.
+  if (state !== STATE.PLAYING && state !== STATE.COUNTDOWN) return;
   state = STATE.PAUSED;
-  showOverlay("일시정지", "스페이스바로 계속하기");
+  showOverlay("일시정지", uiText("스페이스바로 계속하기", "탭해서 계속하기"));
   updateAuxButton();
+}
+
+// v0.6.2 (#22) — leaving the page (tab switch, app to background, screen off) must
+// never cost a life. Called on `visibilitychange` → hidden and from the Android
+// shell's onPause (window.SnakeHost.onPause). Idempotent; no-op outside timed states.
+function suspendGame() {
+  // The 800 ms clear hold would expire while away and auto-start the next stage on
+  // return — advance now so the player comes back to a paused, fresh stage instead.
+  if (state === STATE.STAGE_CLEAR) advanceStage();
+  pause();
+  syncHostKeepAwake();
+}
+
+// v0.6.2 (#28) — the Android shell keeps the screen awake only while a run is in
+// progress (it used to for the whole session). Synced from frame() on every state
+// change; Android.setKeepScreenOn is absent in browsers.
+function syncHostKeepAwake() {
+  const want = state === STATE.PLAYING || state === STATE.COUNTDOWN || state === STATE.STAGE_CLEAR;
+  if (want === hostKeepAwake) return;
+  hostKeepAwake = want;
+  if (typeof Android !== "undefined" && Android.setKeepScreenOn) Android.setKeepScreenOn(want);
 }
 
 function gameOver() {
@@ -340,7 +386,7 @@ function gameOver() {
     localStorage.setItem("snake-best", String(best));
     updateHud();
   }
-  showOverlay("게임 끝", `점수: ${score} · 스페이스바로 다시 시작`);
+  showOverlay("게임 끝", `점수: ${score} · ${uiText("스페이스바로 다시 시작", "탭해서 다시 시작")}`);
   updateAuxButton();
 }
 
@@ -385,7 +431,7 @@ function isSafeDir(dx, dy) {
 
 function enterBlocked() {
   state = STATE.BLOCKED;
-  showOverlay("잠깐!", "← → 또는 A D로 회전해주세요");
+  showOverlay("잠깐!", uiText("← → 또는 A D로 회전해주세요", "회전 버튼으로 방향을 바꿔주세요"));
   updateAuxButton();
 }
 
@@ -441,6 +487,10 @@ function enterCountdown() {
   state = STATE.COUNTDOWN;
   countdownStart = performance.now();
   hideOverlay();
+  // v0.6.2 — keep stageIndex in step with the stage actually loaded. "바로 게임 시작"
+  // loads stage 1 while stageIndex stayed 0 (tutorial), so clearing stage 1 announced
+  // and replayed stage 1 instead of moving on to stage 2.
+  stageIndex = pendingStageIdx;
   loadStage(pendingStageIdx);
   updateAuxButton();
 }
@@ -1036,7 +1086,7 @@ function drawCountdown(now) {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = TOKEN.countdownSkipColor;
     ctx.font = `${TOKEN.countdownSkipFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-    ctx.fillText("Space · Esc — 바로 시작", canvasW / 2, canvasH - 24);
+    ctx.fillText(uiText("Space · Esc — 바로 시작", "화면을 탭하면 바로 시작"), canvasW / 2, canvasH - 24);
     ctx.restore();
   }
 }
@@ -1064,9 +1114,17 @@ function draw(now) {
   if (state === STATE.COUNTDOWN) drawCountdown(now);
 }
 
+// v0.6.2 (#22) — upper bound on one frame's simulated time. Browsers stop rAF while a
+// page is hidden, so the first frame back can carry seconds of backlog; replaying it
+// would run dozens of ticks in one frame (instant wall hit). Long gaps are dropped —
+// the game simply resumes. 250 ms ≈ 1–2 ticks, so a merely slow frame still catches up.
+const MAX_FRAME_DT = 250;
+
 // frame: call updateBulges before draw
 function frame(now) {
-  const dt = now - lastFrame;
+  // Clamped to [0, MAX_FRAME_DT]: also absorbs the first frame's rAF timestamp
+  // landing slightly before the initial performance.now() seed (negative dt).
+  const dt = Math.max(0, Math.min(now - lastFrame, MAX_FRAME_DT));
   lastFrame = now;
 
   // v0.5.8 — seed prevSnake on every transition into PLAYING so the first partial
@@ -1130,6 +1188,7 @@ function frame(now) {
 
   updateBulges(dt, now);
   draw(now);
+  syncHostKeepAwake(); // v0.6.2 (#28) — no-op unless the state's awake-ness changed
   requestAnimationFrame(frame);
 }
 
@@ -1271,8 +1330,39 @@ if (btnHelpClose) {
   btnHelpClose.addEventListener("click", () => closeHelp());
 }
 if (btnHelpOpen) {
-  btnHelpOpen.addEventListener("click", () => openHelp(STATE.CHOICE));
+  // v0.6.2 (#34) — closing help returns to the state it was opened from. The link sits in
+  // the overlay, so it is reachable from READY, CHOICE, PAUSED, OVER, BLOCKED and
+  // STAGE_CLEAR; a hard-coded CHOICE left the choice buttons hidden after READY/PAUSED/
+  // OVER/BLOCKED, and CHOICE ignores every tap, so touch players could not start.
+  btnHelpOpen.addEventListener("click", () => {
+    // Never record HELP as its own return state — closeHelp() would restore HELP forever.
+    if (state === STATE.HELP) return;
+    // STAGE_CLEAR is an 800 ms hold that does not tick while HELP is up, so returning to
+    // it would find the hold long expired and drop the player straight into play. Settle
+    // it the way suspendGame() does: advance now and come back to a paused, fresh stage.
+    if (state === STATE.STAGE_CLEAR) { advanceStage(); pause(); }
+    openHelp(state);
+  });
 }
+
+// v0.6.2 (#22) — pause when the page is hidden (tab switch, minimise, screen off).
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) suspendGame();
+});
+
+// v0.6.2 — the only entry points the Android shell (MainActivity) calls. Keeping the
+// contract here means the shell never depends on game.js internals. Unused in browsers.
+window.SnakeHost = {
+  // Activity left the foreground (#22).
+  onPause() { suspendGame(); },
+  // System back (#28). "handled" = the game used the press; "exit" = the shell should
+  // leave (it backgrounds the app). The shell treats any other result as "exit".
+  onBack() {
+    if (state === STATE.HELP) { closeHelp(); return "handled"; }
+    if (state === STATE.PLAYING || state === STATE.COUNTDOWN) { pause(); return "handled"; }
+    return "exit";
+  },
+};
 
 init();
 lastFrame = performance.now();

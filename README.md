@@ -70,10 +70,11 @@ python -m http.server 8000
 .
 ├── index.html              # Page shell
 ├── style.css               # Visual styling (cozy palette)
-├── game.js                 # Game loop, state, rendering
-├── VERSION                 # Current version (single source of truth)
+├── game.js                 # Game loop, state, rendering; GAME_VERSION (single source of truth)
 ├── HISTORY.md              # Full version history with rationale
 ├── README.md               # This file
+├── RELEASING.md            # Store release procedure (Android)
+├── android/                # Android WebView shell (packages the 3 web files at build time)
 ├── .github/workflows/
 │   └── deploy.yml          # Builds and publishes to GitHub Pages
 └── docs/
@@ -85,7 +86,7 @@ python -m http.server 8000
 
 ## Versioning roadmap
 
-Versions advance one slice at a time. The number is bumped in three places per version: `VERSION`, the `v0.X` string in `index.html`, and the `HISTORY.md` heading.
+Versions advance one slice at a time. The number lives in one place, `const GAME_VERSION` at the top of `game.js`: the page's version label is filled from it, and the Android build derives `versionName`/`versionCode` from it. Each version also gets a `HISTORY.md` heading.
 
 | Version | Focus | Status |
 |---|---|---|
@@ -105,6 +106,7 @@ Versions advance one slice at a time. The number is bumped in three places per v
 | v0.5.9 | Calmer digestion wiggle + head ambient (tongue flick, yawn) | ✅ |
 | v0.6.0 | 다중·이동 과일 + 스테이지 St4~7 확장 (St7 엔드리스) | ✅ |
 | v0.6.1 | 이동 과일 먹기 버그 수정 (swap pass-through) | ✅ |
+| v0.6.2 | 백그라운드 복귀·가로 화면·터치 안내 버그 패치 + 안드로이드 셸 정비 (R8, versionCode 60201) | ✅ |
 | v0.6+ | Full-board clear mechanic (보류 — 향후) | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 
@@ -137,6 +139,6 @@ The branch and PR flow lives in [`docs/WORKFLOW.md`](docs/WORKFLOW.md). Short ve
 
 1. Read `docs/WORKFLOW.md`
 2. Create a branch: `git checkout -b feature/v0.X-<slug>`
-3. Make focused commits; update `VERSION`, the page version string, and `HISTORY.md`
+3. Make focused commits; update `GAME_VERSION` in `game.js` and `HISTORY.md`
 4. `gh pr create` targeting `main`; reference the spec in the PR body
 5. SCM teammate reviews; SCM Lead merges and tags

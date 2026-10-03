@@ -4,6 +4,43 @@ A chronological ledger of what changed in each version and *why*. Newest version
 
 ---
 
+## v0.6.2 (Android versionCode 60201) — 2026-10-03
+
+**Theme:** 0.6.1 출시 후 버그 패치 + 안드로이드 셸 정비. 스펙: `docs/specs/v0.6.2.md`.
+
+### Why
+
+0.6.1(Play versionCode 601) 출시 후 코드 검토와 에뮬레이터 재현에서, 잠시 앱·탭을 벗어났다 돌아오면 바로 게임오버되는 문제(P1)와 가로 화면·창 크기 변경·터치 안내 문제가 확인됐다. 셸만 고치는 다음 업로드에도 versionCode를 올릴 수 있도록 버전 산식을 바꾸고, Play 권장 조치인 R8도 켠다.
+
+### What
+
+- **#22 백그라운드 복귀 즉시 게임오버**: `frame()`의 dt를 0~250ms로 제한해 밀린 틱을 한 프레임에 몰아 실행하지 않는다. `visibilitychange`(hidden)와 안드로이드 `onPause`(`window.SnakeHost.onPause()`)에서 `suspendGame()` — 플레이·카운트다운은 일시정지, 스테이지 클리어 대기는 다음 스테이지로 넘긴 뒤 일시정지. `webView.onPause()/onResume()`.
+- **#23 가로 화면**: 보드 크기를 뷰포트 높이 − 위아래 요소로 제한해 스크롤 제거(915×411: 568→411px, 360×640 세로도 해소). 높이 520px 이하 가로는 여백 축소. 터치 기기 가로에선 회전 버튼을 아래 양쪽 모서리, 시작/일시정지를 오른쪽 위에 표시. 앱은 폰 세로 고정, `displayCutout` 인셋을 루트 FrameLayout padding으로 적용(인셋 소비).
+- **#24 재생성 방지**: `configChanges`에 `smallestScreenSize|density|keyboard|navigation`.
+- **#25 터치 안내**: `(pointer: coarse)`면 안내·카운트다운 문구를 터치 표현으로, 키보드 단축키 줄·도움말 키 목록 대신 터치 조작 목록.
+- **#26 버전 체계**: `GAME_VERSION`이 유일한 원천(`VERSION` 파일·`index.html` 하드코딩 제거, 페이지 표시는 JS가 채움). `versionCode = gameCode*100 + androidRev`(`android/gradle.properties`, 기본 1) → 0.6.2 rev1 = 60201.
+- **#27 R8**: release `isMinifyEnabled`·`isShrinkResources` 켬, JS 브릿지 keep 규칙 명시.
+- **#28 셸 정비**: 뒤로가기 계약 `window.SnakeHost.onBack()`("handled"/"exit"), 진동 200ms 상한, 화면 켜짐은 플레이·카운트다운·스테이지 전환 중에만(`Android.setKeepScreenOn`, UI 스레드), file/content 접근 차단·외부 이동 차단·`onDestroy`에서 WebView 해제. 브릿지 클래스 `HostBridge`.
+- **#29 앱 이름**: 런처 이름 "심플 스네이크"(스토어 이름과 통일).
+- **#32 스테이지 진행**: "바로 게임 시작" 후 스테이지 1을 깨면 스테이지 1이 한 번 더 나오던 문제(v0.5.6부터) — `enterCountdown()`에서 `stageIndex`를 불러온 스테이지와 맞춤.
+- **#34 도움말 복귀 상태**: 오버레이의 「도움말」(`#btn-help-open`)을 닫으면 연 시점의 상태로 돌아간다. 이전엔 항상 CHOICE로 돌아가, READY·PAUSED·OVER·BLOCKED에서 열었다 닫으면 선택 버튼은 숨겨진 채 CHOICE가 탭을 모두 무시해 터치로 시작할 수 없었다(0.6.1에서도 재현). 스테이지 클리어 대기(800ms) 중에 열면 `suspendGame()`처럼 다음 스테이지로 넘긴 뒤 일시정지로 돌아온다.
+- **빌드**: `-PunsignedRelease`(키 파일 무접근 무서명 릴리스), 디버그 전용 빌드는 서명 키를 읽지 않음.
+
+### Verification
+
+- 노드 하니스(DOM 스텁 + 가짜 시계)로 main 코드에서 12초 백그라운드 후 게임오버 재현 → 수정본에서 해소, 카운트다운·클리어 대기 중 이탈, 뒤로가기 계약, 화면 켜짐 호출, 터치/키보드 문구, 스테이지 진행(수정 전 재현·수정 후 해소, 튜토리얼 경로 불변) 확인.
+- 헤드리스 Chrome 11개 화면 크기(데스크톱·폰 가로/세로·태블릿·폴더블)에서 페이지 높이 ≤ 뷰포트, 터치 가로에서 버튼 표시 확인. 1280×800 데스크톱 보드는 이전과 같은 560px.
+- Linux 빌드 머신에서 `assembleDebug`, `assembleRelease -PunsignedRelease`(R8) 빌드 확인 — 결과는 PR 본문.
+- 에뮬레이터 회귀는 PR의 QA 체크리스트로.
+
+### 범위 밖 / 결정 대기
+
+- #30 St3 `fruitMoves` 잠정 플래그 확정.
+- 게임 화면 제목·웹 페이지 제목("뱀 게임")을 "심플 스네이크"로 바꿀지.
+- 진동 끄기 옵션, WebView 렌더러 프로세스 종료 시 복구.
+
+---
+
 ## Android v1 — 2026-09-08
 
 **Theme:** 안드로이드 앱 셸 (A안: 순수 WebView + assets 내장) + 모노레포.
