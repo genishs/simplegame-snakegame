@@ -23,6 +23,7 @@ A chronological ledger of what changed in each version and *why*. Newest version
 - **#28 셸 정비**: 뒤로가기 계약 `window.SnakeHost.onBack()`("handled"/"exit"), 진동 200ms 상한, 화면 켜짐은 플레이·카운트다운·스테이지 전환 중에만(`Android.setKeepScreenOn`, UI 스레드), file/content 접근 차단·외부 이동 차단·`onDestroy`에서 WebView 해제. 브릿지 클래스 `HostBridge`.
 - **#29 앱 이름**: 런처 이름 "심플 스네이크"(스토어 이름과 통일).
 - **#32 스테이지 진행**: "바로 게임 시작" 후 스테이지 1을 깨면 스테이지 1이 한 번 더 나오던 문제(v0.5.6부터) — `enterCountdown()`에서 `stageIndex`를 불러온 스테이지와 맞춤.
+- **#34 도움말 복귀 상태**: 오버레이의 「도움말」(`#btn-help-open`)을 닫으면 연 시점의 상태로 돌아간다. 이전엔 항상 CHOICE로 돌아가, READY·PAUSED·OVER·BLOCKED에서 열었다 닫으면 선택 버튼은 숨겨진 채 CHOICE가 탭을 모두 무시해 터치로 시작할 수 없었다(0.6.1에서도 재현). 스테이지 클리어 대기(800ms) 중에 열면 `suspendGame()`처럼 다음 스테이지로 넘긴 뒤 일시정지로 돌아온다.
 - **빌드**: `-PunsignedRelease`(키 파일 무접근 무서명 릴리스), 디버그 전용 빌드는 서명 키를 읽지 않음.
 
 ### Verification

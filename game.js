@@ -1330,7 +1330,19 @@ if (btnHelpClose) {
   btnHelpClose.addEventListener("click", () => closeHelp());
 }
 if (btnHelpOpen) {
-  btnHelpOpen.addEventListener("click", () => openHelp(STATE.CHOICE));
+  // v0.6.2 (#34) — closing help returns to the state it was opened from. The link sits in
+  // the overlay, so it is reachable from READY, CHOICE, PAUSED, OVER, BLOCKED and
+  // STAGE_CLEAR; a hard-coded CHOICE left the choice buttons hidden after READY/PAUSED/
+  // OVER/BLOCKED, and CHOICE ignores every tap, so touch players could not start.
+  btnHelpOpen.addEventListener("click", () => {
+    // Never record HELP as its own return state — closeHelp() would restore HELP forever.
+    if (state === STATE.HELP) return;
+    // STAGE_CLEAR is an 800 ms hold that does not tick while HELP is up, so returning to
+    // it would find the hold long expired and drop the player straight into play. Settle
+    // it the way suspendGame() does: advance now and come back to a paused, fresh stage.
+    if (state === STATE.STAGE_CLEAR) { advanceStage(); pause(); }
+    openHelp(state);
+  });
 }
 
 // v0.6.2 (#22) — pause when the page is hidden (tab switch, minimise, screen off).
