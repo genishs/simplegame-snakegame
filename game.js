@@ -487,6 +487,10 @@ function enterCountdown() {
   state = STATE.COUNTDOWN;
   countdownStart = performance.now();
   hideOverlay();
+  // v0.6.2 — keep stageIndex in step with the stage actually loaded. "바로 게임 시작"
+  // loads stage 1 while stageIndex stayed 0 (tutorial), so clearing stage 1 announced
+  // and replayed stage 1 instead of moving on to stage 2.
+  stageIndex = pendingStageIdx;
   loadStage(pendingStageIdx);
   updateAuxButton();
 }
