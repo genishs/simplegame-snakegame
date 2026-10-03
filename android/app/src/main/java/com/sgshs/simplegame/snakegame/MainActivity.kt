@@ -6,15 +6,19 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -34,16 +38,22 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // No android:screenOrientation is set in the manifest — portrait and
-        // landscape are both allowed, per spec.
+        // Phones are portrait-locked in the manifest (#23). Screens 600dp+ may ignore
+        // the lock (Android 16), so the page also has a landscape layout.
 
         webView = WebView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
-        setContentView(webView)
+        val root = FrameLayout(this).apply {
+            // Same color as the page, so the inset strips read as page background.
+            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.bg_page))
+            addView(webView)
+        }
+        setContentView(root)
+        applyCutoutInsets(root)
 
         enableImmersiveMode()
 
@@ -89,6 +99,22 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         webView.onResume()
+    }
+
+    /**
+     * #23: keep the page clear of display cutouts (punch holes, notches). The window
+     * is edge-to-edge (and always lays out into the cutout on API 35+), so without
+     * this the board or buttons can sit under the camera in landscape. Done natively
+     * as root padding instead of CSS env(safe-area-inset-*): whether WebView reports
+     * those depends on its version. The insets are consumed here so a WebView that
+     * does report them can't apply them a second time.
+     */
+    private fun applyCutoutInsets(root: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            v.setPadding(cutout.left, cutout.top, cutout.right, cutout.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
     }
 
     /** Immersive fullscreen: hide system bars, allow a swipe to reveal them briefly. */

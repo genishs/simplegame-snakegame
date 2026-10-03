@@ -33,6 +33,16 @@
   /* Desktop default: no reserve for mobile controls */
   --mobile-controls-reserve: 0px;
 
+  /* v0.6.2 (#23) — board sizing against the viewport height, so the page never
+     scrolls. "chrome" = everything stacked above/below the board (container padding,
+     title, HUD, hint, version and the gaps between them), measured and rounded up. */
+  --board-cap: 560px;
+  --page-chrome-v: 224px;
+  /* portrait: same, plus the mobile controls row */
+  --portrait-chrome-v: calc(var(--mobile-controls-reserve) + 144px);
+  /* touch landscape: horizontal room kept free for the side buttons */
+  --side-reserve: calc(var(--mobile-rotate-btn-size) + 2 * var(--mobile-controls-padding));
+
   /* v0.5.7 typography stack */
   --font-stack-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
   --font-weight-label: 500;
@@ -120,17 +130,21 @@ canvas {
   border-radius: var(--radius-ui);
   display: block;
   box-shadow: 0 6px 20px rgba(120, 90, 60, 0.12);
-  /* v0.5.7 — desktop default: min(85vh, 85vw, 560px) */
-  width: min(85vh, 85vw, 560px);
+  /* v0.5.7 — desktop default was min(85vh, 85vw, 560px), which ignored the title/HUD/
+     hint around the board and scrolled on short landscape screens.
+     v0.6.2 (#23) — bound by the viewport height minus that chrome instead.
+     The dvh line wins where supported (mobile browsers' dynamic toolbar). */
+  width: min(85vw, var(--board-cap), max(160px, calc(100vh - var(--page-chrome-v))));
+  width: min(85vw, var(--board-cap), max(160px, calc(100dvh - var(--page-chrome-v))));
   height: auto;
   aspect-ratio: 1 / 1;
   touch-action: manipulation;
 }
 
-/* v0.5.7 — tablet landscape (768px – 1023px) */
+/* v0.5.7 — tablet landscape (768px – 1023px): smaller board cap */
 @media (min-width: 768px) and (max-width: 1023px) {
-  canvas {
-    width: min(85vh, 85vw, 480px);
+  :root {
+    --board-cap: 480px;
   }
 }
 
@@ -242,6 +256,38 @@ canvas {
   display: none;
 }
 
+/* Button look, shared by the portrait row and the v0.6.2 landscape side layout.
+   (Only rendered when .mobile-controls is displayed.) */
+.m-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mobile-btn-bg-idle);
+  border: var(--mobile-btn-border);
+  border-radius: var(--mobile-btn-radius);
+  box-shadow: var(--mobile-btn-shadow);
+  color: var(--mobile-btn-icon-color);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 80ms, box-shadow 80ms;
+}
+
+.m-btn:active {
+  background: var(--mobile-btn-bg-pressed);
+  box-shadow: 0 1px 0 #e6c9a3, 0 2px 6px rgba(120, 90, 60, 0.10);
+}
+
+.m-rotate {
+  width: var(--mobile-rotate-btn-size);
+  height: var(--mobile-rotate-btn-size);
+}
+
+.m-aux {
+  width: var(--mobile-aux-btn-size);
+  height: var(--mobile-aux-btn-size);
+}
+
 /* v0.5.4 mobile portrait media query */
 @media (max-aspect-ratio: 1/1) {
   :root {
@@ -249,8 +295,11 @@ canvas {
   }
 
   canvas {
-    /* v0.5.7 — mobile portrait: 94vw or (94vh - controls reserve - 16px), whichever is smaller */
-    width: min(94vw, max(100px, calc(94vh - var(--mobile-controls-reserve, 80px) - 16px)));
+    /* v0.5.7 — mobile portrait: 94vw or (94vh - controls reserve - 16px), whichever is smaller
+       v0.6.2 (#23) — the height bound now also counts the title/HUD/version above and
+       below the board (it used to scroll by ~13px on 360×640). */
+    width: min(94vw, max(100px, calc(100vh - var(--portrait-chrome-v))));
+    width: min(94vw, max(100px, calc(100dvh - var(--portrait-chrome-v))));
   }
 
   .mobile-controls {
@@ -266,36 +315,6 @@ canvas {
     min-height: var(--mobile-controls-height);
   }
 
-  .m-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--mobile-btn-bg-idle);
-    border: var(--mobile-btn-border);
-    border-radius: var(--mobile-btn-radius);
-    box-shadow: var(--mobile-btn-shadow);
-    color: var(--mobile-btn-icon-color);
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 80ms, box-shadow 80ms;
-  }
-
-  .m-btn:active {
-    background: var(--mobile-btn-bg-pressed);
-    box-shadow: 0 1px 0 #e6c9a3, 0 2px 6px rgba(120, 90, 60, 0.10);
-  }
-
-  .m-rotate {
-    width: var(--mobile-rotate-btn-size);
-    height: var(--mobile-rotate-btn-size);
-  }
-
-  .m-aux {
-    width: var(--mobile-aux-btn-size);
-    height: var(--mobile-aux-btn-size);
-  }
-
   .hint {
     display: none;
   }
@@ -304,6 +323,77 @@ canvas {
   .choice-buttons {
     flex-direction: column;
     align-items: center;
+  }
+}
+
+/* v0.6.2 (#23) — short landscape (phones held sideways, small windows): tighten the
+   stack around the board so it can stay large without the page scrolling. */
+@media (min-aspect-ratio: 1001/1000) and (max-height: 520px) {
+  :root {
+    --page-chrome-v: 132px;
+  }
+
+  .container {
+    gap: 8px;
+    padding: 8px 16px;
+    max-width: 960px; /* hint fits on one line */
+  }
+
+  h1 {
+    font-size: 20px;
+    letter-spacing: 1px;
+  }
+}
+
+/* v0.6.2 (#23) — touch landscape (tablets, phones on the web; phones in the app are
+   portrait-locked but 600dp+ screens ignore the lock on Android 16). The portrait
+   controls row would push the board off-screen, so the buttons float at the screen
+   edges instead: rotate left/right at the bottom corners, start/pause top right. */
+@media (min-aspect-ratio: 1001/1000) and (pointer: coarse) {
+  :root {
+    --page-chrome-v: 176px; /* no hint line */
+  }
+
+  canvas {
+    width: min(85vw, calc(100vw - 2 * var(--side-reserve)), var(--board-cap), max(160px, calc(100vh - var(--page-chrome-v))));
+    width: min(85vw, calc(100vw - 2 * var(--side-reserve)), var(--board-cap), max(160px, calc(100dvh - var(--page-chrome-v))));
+  }
+
+  .hint {
+    display: none;
+  }
+
+  .mobile-controls {
+    display: grid;
+    position: fixed;
+    inset: 0;
+    z-index: 5; /* above the board, below the help modal (10) */
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      ".    . aux"
+      ".    . .  "
+      "left . right";
+    place-items: center;
+    padding: var(--mobile-controls-padding);
+    padding-left: calc(var(--mobile-controls-padding) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--mobile-controls-padding) + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(var(--mobile-controls-padding) + env(safe-area-inset-bottom, 0px));
+    pointer-events: none; /* only the buttons themselves take touches */
+  }
+
+  .mobile-controls .m-btn {
+    pointer-events: auto;
+  }
+
+  #btn-rot-left  { grid-area: left; }
+  #btn-aux       { grid-area: aux; }
+  #btn-rot-right { grid-area: right; }
+}
+
+@media (min-aspect-ratio: 1001/1000) and (max-height: 520px) and (pointer: coarse) {
+  :root {
+    --page-chrome-v: 108px;
   }
 }
 
