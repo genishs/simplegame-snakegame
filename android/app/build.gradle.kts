@@ -101,8 +101,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 shrink/optimize/obfuscate + unused-resource removal (#27, Play's
+            // recommended action). The JS bridge stays intact: AGP's default rules keep
+            // @JavascriptInterface methods and proguard-rules.pro keeps the bridge class.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
