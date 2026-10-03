@@ -1,7 +1,7 @@
 // Single source of truth for the version (issue #26). The page's version label is
 // filled from this, and android/app/build.gradle.kts parses this exact line to
 // derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
-const GAME_VERSION = '0.6.1';
+const GAME_VERSION = '0.6.2';
 
 const versionEl = document.getElementById("version");
 if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
