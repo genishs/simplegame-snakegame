@@ -107,6 +107,7 @@ Versions advance one slice at a time. The number lives in one place, `const GAME
 | v0.6.0 | 다중·이동 과일 + 스테이지 St4~7 확장 (St7 엔드리스) | ✅ |
 | v0.6.1 | 이동 과일 먹기 버그 수정 (swap pass-through) | ✅ |
 | v0.6.2 | 백그라운드 복귀·가로 화면·터치 안내 버그 패치 + 안드로이드 셸 정비 (R8, versionCode 60201) | ✅ |
+| v0.6.3 | 웹 페이지 제목을 스토어·런처 이름 「심플 스네이크」로 통일 (웹은 바로, 안드로이드는 다음 출시 — versionCode 60301) | ✅ |
 | v0.6+ | Full-board clear mechanic (보류 — 향후) | — |
 | v1.0 | Cozy graphic identity complete | reserved |
 
