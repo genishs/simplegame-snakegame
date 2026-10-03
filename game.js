@@ -201,6 +201,7 @@ let yawnAt = -Infinity;        // timestamp of last yawn trigger (drives duratio
 let prevSnake = [];
 let renderT = 0;
 let prevState = null;
+let hostKeepAwake = null; // v0.6.2 (#28) — last value sent to Android.setKeepScreenOn
 
 function snapshotSnake() {
   prevSnake = snake.map((s) => ({ x: s.x, y: s.y }));
@@ -362,6 +363,17 @@ function suspendGame() {
   // return — advance now so the player comes back to a paused, fresh stage instead.
   if (state === STATE.STAGE_CLEAR) advanceStage();
   pause();
+  syncHostKeepAwake();
+}
+
+// v0.6.2 (#28) — the Android shell keeps the screen awake only while a run is in
+// progress (it used to for the whole session). Synced from frame() on every state
+// change; Android.setKeepScreenOn is absent in browsers.
+function syncHostKeepAwake() {
+  const want = state === STATE.PLAYING || state === STATE.COUNTDOWN || state === STATE.STAGE_CLEAR;
+  if (want === hostKeepAwake) return;
+  hostKeepAwake = want;
+  if (typeof Android !== "undefined" && Android.setKeepScreenOn) Android.setKeepScreenOn(want);
 }
 
 function gameOver() {
@@ -1172,6 +1184,7 @@ function frame(now) {
 
   updateBulges(dt, now);
   draw(now);
+  syncHostKeepAwake(); // v0.6.2 (#28) — no-op unless the state's awake-ness changed
   requestAnimationFrame(frame);
 }
 
@@ -1324,7 +1337,15 @@ document.addEventListener("visibilitychange", () => {
 // v0.6.2 — the only entry points the Android shell (MainActivity) calls. Keeping the
 // contract here means the shell never depends on game.js internals. Unused in browsers.
 window.SnakeHost = {
+  // Activity left the foreground (#22).
   onPause() { suspendGame(); },
+  // System back (#28). "handled" = the game used the press; "exit" = the shell should
+  // leave (it backgrounds the app). The shell treats any other result as "exit".
+  onBack() {
+    if (state === STATE.HELP) { closeHelp(); return "handled"; }
+    if (state === STATE.PLAYING || state === STATE.COUNTDOWN) { pause(); return "handled"; }
+    return "exit";
+  },
 };
 
 init();

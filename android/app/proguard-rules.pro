@@ -15,6 +15,6 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
--keepclassmembers class com.sgshs.simplegame.snakegame.VibratorBridge {
+-keepclassmembers class com.sgshs.simplegame.snakegame.HostBridge {
     public *;
 }

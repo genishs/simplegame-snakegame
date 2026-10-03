@@ -1,5 +1,6 @@
 package com.sgshs.simplegame.snakegame
 
+import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
@@ -8,6 +9,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -37,7 +39,8 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // FLAG_KEEP_SCREEN_ON is no longer set for the whole session: the page turns it
+        // on only during active play via Android.setKeepScreenOn() (#28).
         // Phones are portrait-locked in the manifest (#23). Screens 600dp+ may ignore
         // the lock (Android 16), so the page also has a landscape layout.
 
@@ -63,15 +66,24 @@ class MainActivity : AppCompatActivity() {
 
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true // required: localStorage best-score persistence
+        // #28: assets come only through WebViewAssetLoader — no file:// or content://.
+        webView.settings.allowFileAccess = false
+        webView.settings.allowContentAccess = false
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+
+            // #28: the game never navigates; keep the WebView on the bundled page.
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean = request.url.host != WebViewAssetLoader.DEFAULT_DOMAIN
         }
 
-        webView.addJavascriptInterface(VibratorBridge(this), "Android")
+        webView.addJavascriptInterface(HostBridge(this), "Android")
 
         webView.loadUrl("https://appassets.androidplatform.net/assets/index.html")
 
@@ -101,6 +113,13 @@ class MainActivity : AppCompatActivity() {
         webView.onResume()
     }
 
+    override fun onDestroy() {
+        // #28: release the WebView with the activity instead of leaking it.
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.destroy()
+        super.onDestroy()
+    }
+
     /**
      * #23: keep the page clear of display cutouts (punch holes, notches). The window
      * is edge-to-edge (and always lays out into the cutout on API 35+), so without
@@ -127,50 +146,61 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Back button: game.js defines a top-level `pause()` function and a
-     * `state`/`STATE` pair (confirmed in game.js — not a native game re-impl).
-     * While actually playing, back pauses instead of leaving the app; in every
-     * other state (or if pause() is ever removed from the page) it falls back
-     * to backgrounding the task rather than destroying the activity/WebView.
+     * Back button (#28): the page owns the decision through an explicit contract,
+     * `window.SnakeHost.onBack()` in game.js, instead of the shell guessing at game
+     * globals (which would break silently if game.js were ever bundled or renamed).
+     * It returns "handled" when the game used the press (paused play or the
+     * countdown, closed the help screen) and "exit" otherwise. Anything else —
+     * including a missing SnakeHost — backgrounds the task rather than destroying
+     * the activity, so a broken page can never trap the back button.
      */
     private val backPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
             webView.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        if (typeof pause === 'function' &&
-                            typeof STATE !== 'undefined' &&
-                            typeof state !== 'undefined' &&
-                            state === STATE.PLAYING) {
-                            pause();
-                            return 'paused';
-                        }
-                    } catch (e) {}
-                    return 'exit';
-                })();
-                """.trimIndent()
-            ) { result -> if (result != "\"paused\"") moveTaskToBack(true) }
+                "(function(){try{return window.SnakeHost.onBack();}catch(e){return 'exit';}})();"
+            ) { result -> if (result != "\"handled\"") moveTaskToBack(true) }
         }
     }
 }
 
-/** JS bridge: window.Android.vibrate(ms) — called from game.js on eat / game-over. */
-class VibratorBridge(private val context: Context) {
+/**
+ * JS bridge exposed to the page as `window.Android` (game.js calls it only when it
+ * exists, so the web build is unaffected):
+ * - vibrate(ms): short haptic on fruit eat / game over.
+ * - setKeepScreenOn(on): keep the display awake only while a run is in progress.
+ * Bridge methods run on a WebView binder thread, never the UI thread.
+ */
+class HostBridge(private val activity: Activity) {
 
     private val vibrator: Vibrator by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val manager = activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             manager.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            activity.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
     }
 
     @JavascriptInterface
     fun vibrate(ms: Long) {
-        if (ms <= 0) return
-        vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+        if (ms <= 0 || !vibrator.hasVibrator()) return
+        // #28: the page is trusted, but cap anyway so no call can buzz for long.
+        val duration = ms.coerceAtMost(MAX_VIBRATE_MS)
+        vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
+    /** #28: replaces the always-on FLAG_KEEP_SCREEN_ON; window flags need the UI thread. */
+    @JavascriptInterface
+    fun setKeepScreenOn(on: Boolean) {
+        activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+            val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            if (on) activity.window.addFlags(flag) else activity.window.clearFlags(flag)
+        }
+    }
+
+    private companion object {
+        const val MAX_VIBRATE_MS = 200L
     }
 }
