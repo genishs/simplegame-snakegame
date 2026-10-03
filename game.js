@@ -1,6 +1,10 @@
-// v0.6.1 — Android shell SoT: android/build.gradle.kts parses this to derive
-// versionName/versionCode. Web behavior is unaffected (unused constant).
+// Single source of truth for the version (issue #26). The page's version label is
+// filled from this, and android/app/build.gradle.kts parses this exact line to
+// derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
 const GAME_VERSION = '0.6.1';
+
+const versionEl = document.getElementById("version");
+if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");

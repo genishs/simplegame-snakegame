@@ -27,7 +27,7 @@ DEPENDENCIES: ...
 
 ### 3. Build
 - `developer` creates the branch: `git checkout -b feature/v0.X-<slug>`
-- First commit on the branch bumps `VERSION` and the in-page `v0.X` string
+- First commit on the branch bumps `GAME_VERSION` at the top of `game.js` (the page label and the Android version are derived from it)
 - Subsequent commits are focused: one logical change each
 - `dev-lead` reviews before the PR opens
 
@@ -76,7 +76,7 @@ git push origin v0.X
 - [ ] Space restarts after game over
 - [ ] Pause on Space mid-game; Space resumes
 - [ ] Best score persists across reloads
-- [ ] Visible `v0.X` matches the `VERSION` file
+- [ ] Visible `v0.X` matches `GAME_VERSION` in `game.js`
 - [ ] Spec acceptance criteria all met
 - [ ] `HISTORY.md` has a new entry for the version
 
@@ -106,5 +106,5 @@ Average run time: ~25 seconds. Site updates within a minute of merge.
 - Direct commits to `main`
 - Force-push to `main`
 - Skipping `HISTORY.md` updates
-- Merging while the version string disagrees across `VERSION` / `index.html` / heading
+- Merging while `GAME_VERSION` disagrees with the `HISTORY.md` heading
 - "Just this once" framework or build-tool introductions without an architectural review from Dev Lead

@@ -9,6 +9,13 @@ plugins {
 // '<major>.<minor>.<patch>';` out of it and derive versionName/versionCode
 // from that — never hand-typed here. Build fails loudly if it can't be found
 // or doesn't parse, rather than silently shipping a stale version.
+//
+// versionCode = gameCode * 100 + androidRev (issue #26)
+//   gameCode   = major*10000 + minor*100 + patch   (0.6.2 -> 602)
+//   androidRev = Gradle property `androidRev` (gradle.properties, 1..99).
+//                Bump it for a shell-only re-upload of the same game version;
+//                reset it to 1 whenever GAME_VERSION changes.
+//   e.g. 0.6.2 rev 1 -> 60201. Always above the old formula's 601 (0.6.1).
 // ---------------------------------------------------------------------------
 val repoRoot: File = rootProject.projectDir.parentFile
     ?: throw GradleException("android/ must live one level under the repo root")
@@ -29,9 +36,20 @@ fun readGameVersion(): GameVersion {
         )
     val (major, minor, patch) = match.destructured
     val name = "$major.$minor.$patch"
-    // major*10000 + minor*100 + patch — e.g. 0.6.1 -> 601
-    val code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
-    return GameVersion(name, code)
+    if (minor.toInt() > 99 || patch.toInt() > 99) {
+        throw GradleException(
+            "GAME_VERSION $name: minor and patch must be 0..99, or versionCode would collide"
+        )
+    }
+    val gameCode = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
+
+    val revText = providers.gradleProperty("androidRev").getOrElse("1").trim()
+    val androidRev = revText.toIntOrNull()
+        ?: throw GradleException("androidRev must be an integer, got '$revText'")
+    if (androidRev !in 1..99) {
+        throw GradleException("androidRev must be 1..99, got $androidRev")
+    }
+    return GameVersion(name, gameCode * 100 + androidRev)
 }
 
 val gameVersion = readGameVersion()

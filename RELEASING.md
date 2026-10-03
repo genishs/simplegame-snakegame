@@ -17,7 +17,9 @@
 - 정의 위치: `game.js` 최상단의 `const GAME_VERSION = '<major>.<minor>.<patch>';` (웹 게임 버전의 단일 원천이며, Gradle(`android/app/build.gradle.kts`)이 이 값을 읽어 `versionName`을 만들고 `versionCode`를 계산합니다) (여기 한 곳에서만 바꿉니다)
 - versionName은 `major.minor.patch`, 빌드 번호(versionCode)는 항상 이전보다 커야 합니다.
 - `versionCode`는 **`gameCode*100 + androidRev`** 로 계산합니다(결정: 이슈 #26). `gameCode = major*10000 + minor*100 + patch`이고, `androidRev`는 Gradle 프로퍼티로 받으며 웹 버전이 오르면 1부터 다시 시작합니다. 예: 0.6.2 rev1 → 60201.
-- 현재 출시본(0.6.1)의 versionCode 601은 이전 산식(`gameCode`만 사용)의 값입니다. 새 산식의 값(60201 이상)은 항상 더 크므로 단조 증가는 유지됩니다. `build.gradle.kts`가 아직 이전 산식을 계산하는 동안에는 새 빌드를 만들지 말고, #26을 반영한 뒤에 만듭니다.
+- `androidRev`는 `android/gradle.properties`의 `androidRev=`에 적어 커밋합니다(1~99, 태그 커밋만으로 versionCode가 재현되도록). 같은 웹 버전에서 안드로이드 셸만 고쳐 다시 올릴 때 이 값만 올립니다. `-PandroidRev=N`으로 덮어쓸 수 있지만 제출 빌드에는 쓰지 않습니다. minor·patch가 99를 넘거나 `androidRev`가 범위를 벗어나면 빌드가 실패합니다.
+- 0.6.1의 versionCode 601은 이전 산식(`gameCode`만 사용)의 값입니다. 새 산식의 값(60201 이상)은 항상 더 크므로 단조 증가는 유지됩니다.
+- 웹 페이지의 버전 표시도 `GAME_VERSION`에서 채웁니다. 예전의 `VERSION` 파일과 `index.html` 하드코딩 표기는 없앴습니다.
 - 버전마다 GitHub 마일스톤(예: "0.6.2 (vc60201)")을 만들고 그 버전에 넣을 이슈를 담습니다. 마일스톤을 닫는 것이 곧 출시입니다.
 
 ## 3. 태그
