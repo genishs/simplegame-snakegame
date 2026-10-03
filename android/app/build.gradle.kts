@@ -85,7 +85,18 @@ android {
     val keystoreDir = File(System.getProperty("user.home")!!, "keystores")
     val keystoreFile = File(keystoreDir, "sgshs-upload.jks")
     val keystorePassFile = File(keystoreDir, "sgshs-upload.pass")
-    val hasSigningMaterial = keystoreFile.exists() && keystorePassFile.exists()
+    // -PunsignedRelease: never sign, even where the key exists — for checking an R8
+    // release build without touching the key. (Changing HOME doesn't help: on Linux the
+    // JVM takes user.home from the passwd entry, not from $HOME.)
+    val forceUnsigned = providers.gradleProperty("unsignedRelease")
+        .map { it.isEmpty() || it.toBoolean() }
+        .getOrElse(false)
+    // Debug-only invocations (assembleDebug, installDebug, ...) don't need the key, so
+    // don't even look for it. Anything else (assembleRelease, bundleRelease, build, an
+    // abbreviation, ...) keeps the old behaviour and signs when the key is present.
+    val debugOnly = gradle.startParameter.taskNames.all { it.contains("Debug") }
+    val hasSigningMaterial = !forceUnsigned && !debugOnly &&
+        keystoreFile.exists() && keystorePassFile.exists()
 
     signingConfigs {
         create("release") {
