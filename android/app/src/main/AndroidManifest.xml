@@ -4,6 +4,11 @@
     <!-- Fruit-eat / game-over haptics via the Android.vibrate() JS bridge. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- screenOrientation="portrait" makes Play infer screen.portrait as a *required*
+         feature and filter out devices without a portrait screen (cars, TV, some
+         tablets). Declaring it optional keeps the lock and drops the filter. (#36) -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
