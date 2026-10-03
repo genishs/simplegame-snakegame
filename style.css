@@ -530,3 +530,19 @@ canvas {
     max-height: 85vh;
   }
 }
+
+/* v0.6.2 (#25) — keyboard vs touch instructions (matches isTouchUi() in game.js).
+   Kept last in the file so it overrides the display of .help-keys / .hint above. */
+.touch-only {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .kbd-only {
+    display: none;
+  }
+
+  .help-keys.touch-only {
+    display: grid;
+  }
+}

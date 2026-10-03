@@ -26,7 +26,7 @@
         <button class="help-link" id="btn-help-open" type="button">도움말</button>
       </div>
     </div>
-    <p class="hint">← → / A D &mdash; 왼쪽/오른쪽 회전 &nbsp;&middot;&nbsp; 스페이스 &mdash; 시작/일시정지/재시작 &nbsp;&middot;&nbsp; Esc &mdash; 튜토리얼 건너뛰기 &nbsp;&middot;&nbsp; 1 / 2 &mdash; 튜토리얼 / 바로 시작</p>
+    <p class="hint kbd-only">← → / A D &mdash; 왼쪽/오른쪽 회전 &nbsp;&middot;&nbsp; 스페이스 &mdash; 시작/일시정지/재시작 &nbsp;&middot;&nbsp; Esc &mdash; 튜토리얼 건너뛰기 &nbsp;&middot;&nbsp; 1 / 2 &mdash; 튜토리얼 / 바로 시작</p>
     <p class="version" id="version"></p>
     <div class="mobile-controls" id="mobile-controls">
       <button id="btn-rot-left" class="m-btn m-rotate" type="button" aria-label="왼쪽 회전">
@@ -55,13 +55,17 @@
       <h2 id="help-title">도움말</h2>
       <section class="help-section">
         <h3>조작 방법</h3>
-        <dl class="help-keys">
+        <dl class="help-keys kbd-only">
           <dt>← → 또는 A D</dt><dd>뱀을 왼쪽 / 오른쪽으로 돌려요</dd>
           <dt>스페이스바</dt><dd>시작 · 일시정지 · 재시작</dd>
           <dt>Esc</dt><dd>튜토리얼 건너뛰기</dd>
           <dt>1 / 2</dt><dd>튜토리얼 시작 / 바로 게임 시작</dd>
         </dl>
-        <p class="help-mobile-note">모바일이에요? 화면 왼쪽 / 오른쪽 버튼으로 회전해요!</p>
+        <p class="help-mobile-note kbd-only">모바일이에요? 화면 왼쪽 / 오른쪽 버튼으로 회전해요!</p>
+        <dl class="help-keys touch-only">
+          <dt>회전 버튼</dt><dd>뱀을 왼쪽 / 오른쪽으로 돌려요 (화면 왼쪽·오른쪽을 탭해도 돼요)</dd>
+          <dt>시작 버튼</dt><dd>시작 · 일시정지 · 재시작 (멈춘 화면을 탭해도 돼요)</dd>
+        </dl>
       </section>
       <section class="help-section">
         <h3>스테이지 클리어 규칙</h3>

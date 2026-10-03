@@ -226,7 +226,10 @@ function init() {
   loadStage(stageIndex);
   resizeCanvas();
   updateHud();
-  showOverlay("스페이스바로 시작", "← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작");
+  showOverlay(
+    uiText("스페이스바로 시작", "화면을 탭해서 시작"),
+    uiText("← → 또는 A D — 회전 · 스페이스 — 시작/일시정지/재시작", "회전 버튼이나 화면 왼쪽·오른쪽 탭 — 회전"),
+  );
   updateAuxButton();
   // v0.5.7 — auto-show help on first visit
   try {
@@ -309,6 +312,21 @@ function updateHud() {
   stageEl.textContent = stage.label;
 }
 
+// v0.6.2 (#25) — touch-first devices (phones, tablets, the Android app) get touch
+// wording instead of keyboard instructions. A MediaQueryList's `matches` is live, so a
+// tablet that gains a mouse/keyboard as its primary pointer follows along.
+const coarsePointerMq = typeof window.matchMedia === "function"
+  ? window.matchMedia("(pointer: coarse)")
+  : null;
+
+function isTouchUi() {
+  return !!(coarsePointerMq && coarsePointerMq.matches);
+}
+
+function uiText(keyboard, touch) {
+  return isTouchUi() ? touch : keyboard;
+}
+
 function showOverlay(title, msg) {
   overlayTitle.textContent = title;
   overlayMsg.textContent = msg;
@@ -332,7 +350,7 @@ function pause() {
   // running while the page is hidden would finish it unseen and start play on return.
   if (state !== STATE.PLAYING && state !== STATE.COUNTDOWN) return;
   state = STATE.PAUSED;
-  showOverlay("일시정지", "스페이스바로 계속하기");
+  showOverlay("일시정지", uiText("스페이스바로 계속하기", "탭해서 계속하기"));
   updateAuxButton();
 }
 
@@ -356,7 +374,7 @@ function gameOver() {
     localStorage.setItem("snake-best", String(best));
     updateHud();
   }
-  showOverlay("게임 끝", `점수: ${score} · 스페이스바로 다시 시작`);
+  showOverlay("게임 끝", `점수: ${score} · ${uiText("스페이스바로 다시 시작", "탭해서 다시 시작")}`);
   updateAuxButton();
 }
 
@@ -401,7 +419,7 @@ function isSafeDir(dx, dy) {
 
 function enterBlocked() {
   state = STATE.BLOCKED;
-  showOverlay("잠깐!", "← → 또는 A D로 회전해주세요");
+  showOverlay("잠깐!", uiText("← → 또는 A D로 회전해주세요", "회전 버튼으로 방향을 바꿔주세요"));
   updateAuxButton();
 }
 
@@ -1052,7 +1070,7 @@ function drawCountdown(now) {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = TOKEN.countdownSkipColor;
     ctx.font = `${TOKEN.countdownSkipFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-    ctx.fillText("Space · Esc — 바로 시작", canvasW / 2, canvasH - 24);
+    ctx.fillText(uiText("Space · Esc — 바로 시작", "화면을 탭하면 바로 시작"), canvasW / 2, canvasH - 24);
     ctx.restore();
   }
 }
