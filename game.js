@@ -328,10 +328,22 @@ function start() {
 }
 
 function pause() {
-  if (state !== STATE.PLAYING) return;
+  // v0.6.2 (#22) — COUNTDOWN can pause too: it runs on wall-clock time, so leaving it
+  // running while the page is hidden would finish it unseen and start play on return.
+  if (state !== STATE.PLAYING && state !== STATE.COUNTDOWN) return;
   state = STATE.PAUSED;
   showOverlay("일시정지", "스페이스바로 계속하기");
   updateAuxButton();
+}
+
+// v0.6.2 (#22) — leaving the page (tab switch, app to background, screen off) must
+// never cost a life. Called on `visibilitychange` → hidden and from the Android
+// shell's onPause (window.SnakeHost.onPause). Idempotent; no-op outside timed states.
+function suspendGame() {
+  // The 800 ms clear hold would expire while away and auto-start the next stage on
+  // return — advance now so the player comes back to a paused, fresh stage instead.
+  if (state === STATE.STAGE_CLEAR) advanceStage();
+  pause();
 }
 
 function gameOver() {
@@ -1068,9 +1080,17 @@ function draw(now) {
   if (state === STATE.COUNTDOWN) drawCountdown(now);
 }
 
+// v0.6.2 (#22) — upper bound on one frame's simulated time. Browsers stop rAF while a
+// page is hidden, so the first frame back can carry seconds of backlog; replaying it
+// would run dozens of ticks in one frame (instant wall hit). Long gaps are dropped —
+// the game simply resumes. 250 ms ≈ 1–2 ticks, so a merely slow frame still catches up.
+const MAX_FRAME_DT = 250;
+
 // frame: call updateBulges before draw
 function frame(now) {
-  const dt = now - lastFrame;
+  // Clamped to [0, MAX_FRAME_DT]: also absorbs the first frame's rAF timestamp
+  // landing slightly before the initial performance.now() seed (negative dt).
+  const dt = Math.max(0, Math.min(now - lastFrame, MAX_FRAME_DT));
   lastFrame = now;
 
   // v0.5.8 — seed prevSnake on every transition into PLAYING so the first partial
@@ -1277,6 +1297,17 @@ if (btnHelpClose) {
 if (btnHelpOpen) {
   btnHelpOpen.addEventListener("click", () => openHelp(STATE.CHOICE));
 }
+
+// v0.6.2 (#22) — pause when the page is hidden (tab switch, minimise, screen off).
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) suspendGame();
+});
+
+// v0.6.2 — the only entry points the Android shell (MainActivity) calls. Keeping the
+// contract here means the shell never depends on game.js internals. Unused in browsers.
+window.SnakeHost = {
+  onPause() { suspendGame(); },
+};
 
 init();
 lastFrame = performance.now();

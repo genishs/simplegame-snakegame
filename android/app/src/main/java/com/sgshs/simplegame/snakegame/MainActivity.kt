@@ -73,6 +73,24 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) enableImmersiveMode()
     }
 
+    /**
+     * #22: pause the game whenever the activity leaves the foreground (home, screen
+     * off, incoming call). The page stops getting frames while we're away; without an
+     * explicit pause the missed ticks used to run all at once on return. Not relying on
+     * the page's own visibilitychange alone — whether WebView fires it depends on the
+     * WebView version.
+     */
+    override fun onPause() {
+        super.onPause()
+        webView.evaluateJavascript("window.SnakeHost && window.SnakeHost.onPause();", null)
+        webView.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView.onResume()
+    }
+
     /** Immersive fullscreen: hide system bars, allow a swipe to reveal them briefly. */
     private fun enableImmersiveMode() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
