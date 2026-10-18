@@ -41,8 +41,8 @@ class MainActivity : AppCompatActivity() {
 
         // FLAG_KEEP_SCREEN_ON is no longer set for the whole session: the page turns it
         // on only during active play via Android.setKeepScreenOn() (#28).
-        // Phones are portrait-locked in the manifest (#23). Screens 600dp+ may ignore
-        // the lock (Android 16), so the page also has a landscape layout.
+        // No orientation lock (#41): the page lays itself out for portrait and landscape,
+        // and rotation is handled via configChanges without recreating the activity.
 
         webView = WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(

@@ -4,9 +4,9 @@
     <!-- Fruit-eat / game-over haptics via the Android.vibrate() JS bridge. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- screenOrientation="portrait" makes Play infer screen.portrait as a *required*
-         feature and filter out devices without a portrait screen (cars, TV, some
-         tablets). Declaring it optional keeps the lock and drops the filter. (#36) -->
+    <!-- Older builds locked the activity to portrait, which made Play infer
+         screen.portrait as a *required* feature. The lock is gone (#41), but keeping
+         the optional declaration is harmless and keeps the device filter off. (#36) -->
     <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 
     <application
@@ -21,13 +21,13 @@
              resize can bring (rotation, fold/unfold, multi-window and freeform resize,
              display size/density) plus keyboard attach and night mode in place; the
              page re-lays itself out on its own resize event. (#24)
-             screenOrientation: phones play in portrait (#23). Android 16 ignores the
-             lock on 600dp+ screens; the page has a landscape layout for those. -->
+             No screenOrientation / resizeableActivity restriction (#41): Android 16
+             ignores them on 600dp+ screens anyway, and Play flags them as a large-screen
+             issue. The page has portrait, landscape and touch-landscape layouts. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboard|keyboardHidden|navigation|uiMode"
-            android:screenOrientation="portrait"
             android:label="@string/app_name"
             android:theme="@style/Theme.SnakeGame.Splash">
             <intent-filter>
