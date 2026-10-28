@@ -21,7 +21,7 @@ A chronological ledger of what changed in each version and *why*. Newest version
 - **성능**: 칸 좌표는 다시 쓰는 `Int16Array`, 점 계산 결과는 객체 하나를 다시 쓴다. 프레임마다 배열을 새로 만들지 않는다.
 - **버전**: `GAME_VERSION` 0.6.4, `androidRev` 1(다음 안드로이드 versionCode = 60401).
 - **불변**: tick·충돌·성장·과일 이동·점수·스테이지·일시정지·입력·안드로이드 브릿지. `game.js` 변경은 렌더 함수, TOKEN, 렌더 전용 상태(`snapshotSnake`·`loadStage`의 꼬리 기억 두 줄)뿐이다.
-- **페이로드**: `game.js` 51,063 → 55,269 B(+4,206 B). 3파일 합계 70,373 → 74,579 B(약 72.8 KiB, 75KB 한도 안).
+- **페이로드**: `game.js` 51,063 → 55,513 B(+4,450 B). 3파일 합계 70,373 → 74,823 B(약 73.1 KiB, 75KB 한도 안).
 
 ### Verification
 

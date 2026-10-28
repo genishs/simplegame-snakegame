@@ -640,10 +640,14 @@ const PP = { x: 0, y: 0, tx: 1, ty: 0 }; // pathPt() result, pixels + unit tange
 function buildPath() {
   const n = snake.length;
   const p = prevSnake;
+  // moving = a real tick happened since the snapshot (its old head is our neck); a stale
+  // snapshot (e.g. the frame a new stage loads) renders static.
   const moving = state === STATE.PLAYING && p.length > 0
-    && (p[0].x !== snake[0].x || p[0].y !== snake[0].y);
+    && p[0].x === snake[1].x && p[0].y === snake[1].y;
   const t = moving && renderT > 0 ? renderT : 1;
-  const extra = moving && p.length === n ? 1 : 0; // tail is leaving p[n-1]
+  const q = p[n - 1];
+  const extra = moving && p.length === n
+    && Math.abs(q.x - snake[n - 1].x) + Math.abs(q.y - snake[n - 1].y) === 1 ? 1 : 0; // tail leaving q
   const m = n - 1 + extra;
   if (chX.length < m + 3) { chX = new Int16Array(m * 2 + 8); chY = new Int16Array(m * 2 + 8); }
   for (let k = 0; k < n; k++) { chX[k + 1] = snake[k].x; chY[k + 1] = snake[k].y; }
