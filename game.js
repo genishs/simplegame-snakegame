@@ -90,6 +90,8 @@ const TOKEN = {
   headTongueOn: 120,
   // v0.5.2 body token (factor; actual = cellSize * 0.86)
   bodyThicknessFactor: 0.86,
+  // v0.6.4 rounded path: a late turn press still bends in over at least this many ticks
+  bendMinTicks: 0.4,
   // v0.5.3 digestion bulge tokens
   bulgeFlowSpeed: 2.0,
   bulgeMaxScale: 0.80,
@@ -624,7 +626,10 @@ let pathBeta = 1;   // how far the head cell has bent toward a pending turn (0..
 let pathUH = 0;     // head-end u
 let pathUT = 0;     // tail-end u
 let pathOff = 0;    // u of snake[0] at this frame (index space → path space)
-let antX = 1, antY = 0, antT0 = 0; // pending-turn tracking for pathBeta
+// Pending-turn tracking for pathBeta: the cell that bends, the press point on a
+// continuous clock (ticks + renderT), and the ramp length in ticks.
+let antX = 1, antY = 0, bendX = -1, bendY = -1, bendP0 = 0, bendSpan = 1;
+let pathTicks = 0, pathPrev = null;
 const PP = { x: 0, y: 0, tx: 1, ty: 0 }; // pathPt() result, pixels + unit tangent
 
 function buildPath() {
@@ -647,19 +652,23 @@ function buildPath() {
     chX[m + 2] = 2 * lx - chX[m]; chY[m + 2] = 2 * ly - chY[m];
   }
   // Ahead of the head: a pending ±90° turn (nextDir) bends the head cell, blended in
-  // from the moment it was pressed (pathBeta 0→1 by the tick), so the head path stays
-  // continuous when the tick commits the turn. Otherwise straight on.
+  // from the moment it was pressed (pathBeta 0→1, done by the tick or after
+  // TOKEN.bendMinTicks for a late press) so the head never jumps. Otherwise straight.
   const dx = chX[1] - chX[2], dy = chY[1] - chY[2];
   const turn = nextDir.x * dx + nextDir.y * dy === 0;
   chX[0] = chX[1] + (turn ? nextDir.x : dx);
   chY[0] = chY[1] + (turn ? nextDir.y : dy);
-  if (state === STATE.PLAYING) {
-    const r = moving ? t : renderT;
-    if (nextDir.x !== antX || nextDir.y !== antY) { antX = nextDir.x; antY = nextDir.y; antT0 = r; }
-    pathBeta = antT0 >= 1 ? 1 : Math.min(1, Math.max(0, (r - antT0) / (1 - antT0)));
-  } else {
-    antX = nextDir.x; antY = nextDir.y; antT0 = 0; pathBeta = 1;
+  if (p !== pathPrev) { pathPrev = p; pathTicks++; }
+  const r = moving ? t : renderT;
+  const clock = pathTicks + (r >= 1 ? 0.999 : r);
+  if (state !== STATE.PLAYING) {
+    bendX = -1;
+  } else if (nextDir.x !== antX || nextDir.y !== antY) {
+    bendX = chX[1]; bendY = chY[1]; bendP0 = clock;
+    bendSpan = Math.max(TOKEN.bendMinTicks, 1 - r);
   }
+  antX = nextDir.x; antY = nextDir.y;
+  pathBeta = Math.min(1, Math.max(0, (clock - bendP0) / bendSpan));
   chM = m;
   pathOff = moving ? 1 - t : 0;
   pathUH = pathOff;
@@ -685,7 +694,7 @@ function pathPt(u) {
   let x = cx + (w - 0.5) * ix, y = cy + (w - 0.5) * iy, tx = ix, ty = iy;
   if (cornerAt(k)) {
     const ox = chX[j - 1] - cx, oy = chY[j - 1] - cy;
-    const b = k === 0 ? pathBeta : 1;
+    const b = cx === bendX && cy === bendY ? pathBeta : 1;
     const f = w * Math.PI / 2, c = Math.cos(f), s = Math.sin(f);
     // quarter arc about the cell corner O = center + (out − in)/2
     x += (cx + (ox - ix - ox * c + ix * s) / 2 - x) * b;
@@ -849,14 +858,6 @@ function roundedRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-// angleFromDir: direction vector → rotation angle in radians
-// No per-call allocation; uses direct lookup on fields.
-function angleFromDir(dir) {
-  if (dir.x === 1)  return 0;
-  if (dir.x === -1) return Math.PI;
-  if (dir.y === 1)  return Math.PI * 0.5;
-  return Math.PI * 1.5; // dir.y === -1
-}
 
 // computePulse: returns eat-pulse scale (1.0 to eatPulseScale triangle)
 function computePulse(now) {
@@ -918,8 +919,9 @@ function drawSnakeBody() {
 }
 
 // drawSnakeHead: egg-shape ellipse head with eyes and tongue
-function drawSnakeHead(direction, now) {
-  // v0.6.4 — the head rides the front end of the rounded body path.
+function drawSnakeHead(now) {
+  // v0.6.4 — the head rides the front end of the rounded body path and faces along
+  // its tangent, so it turns through a corner instead of snapping 90° on the tick.
   pathPt(pathUH);
   const cx = PP.x;
   const cy = PP.y;
@@ -935,7 +937,7 @@ function drawSnakeHead(direction, now) {
 
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(angleFromDir(direction));
+  ctx.rotate(Math.atan2(PP.ty, PP.tx));
   // facing axis = local +x (post-rotate), so yawn facing scale multiplies x.
   ctx.scale(pulse * sx * yx, pulse * sy * yy);
 
@@ -1141,7 +1143,7 @@ function draw(now) {
   buildPath(); // v0.6.4 — once per frame, shared by body, bulges and head
   drawSnakeBody();
   drawBulges(now);
-  drawSnakeHead(dir, now);
+  drawSnakeHead(now);
   drawTouchHint(now);
   // TODO 12 — draw countdown overlay
   if (state === STATE.COUNTDOWN) drawCountdown(now);
