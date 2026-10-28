@@ -94,12 +94,17 @@ const TOKEN = {
   bendMinTicks: 0.4,
   // v0.5.3 digestion bulge tokens
   bulgeFlowSpeed: 2.0,
-  bulgeMaxScale: 0.80,
-  bulgeMinScale: 0.60,
   bulgeFadeMs: 200,
   bulgeFill: "#d76461",
   bulgeAspect: 1.15,
-  bulgeWidthCapFactor: 0.86 * 0.95, // actual = cellSize * factor
+  // v0.6.4 swelling lump (cell-relative; replaces bulgeMax/MinScale + WidthCapFactor)
+  bulgeSwellStart: 0.17,   // extra half-width at the head → 1.20 cells wide (body 0.86)
+  bulgeSwellEnd: 0.05,     // extra half-width at the tail → 0.96 cells wide
+  bulgeSwellHalfLen: 0.8,  // swell reach along the body, each side, in cells
+  bulgeTintRadius: 0.30,   // fruit seen inside: half-height at spawn (×cell)
+  bulgeTintEndScale: 0.6,  // fruit size at the tail, relative to spawn
+  bulgeTintAlphaStart: 0.9,
+  bulgeTintAlphaEnd: 0.12,
   // v0.5.7 wiggle tokens (v0.5.9: 절제 — 토큰 값만 하향, drawBulges 구조 불변)
   wiggleAmpFactor: 0.07,    // was 0.15 — amplitude = cellSize * 0.07 (~1.4px peak)
   wiggleFreqHz: 1.5,        // was 2.0 — 속도 절제 (full cycle 667ms)
@@ -761,50 +766,60 @@ function bulgeU(progress) {
   return Math.min(pathUT, Math.max(pathUH, progress + pathOff));
 }
 
-// Task 5 — drawBulges (v0.5.7: wiggle added)
-function drawBulges(now) {
-  const bulgeWidthCap = cellSize * TOKEN.bulgeWidthCapFactor;
+// v0.6.4 (#45) — the digestion lump is the body outline itself swelling: per bulge, 13
+// circles along the path whose radius rises from the body half-width to a cos² peak,
+// filled in the body's own shadow/green passes (one path per pass, so no alpha build-
+// up) — one bulging tube that follows corners. The fruit shows through as a bulgeFill
+// ellipse. Along the way (frac 0→1) the swell flattens and the fruit shrinks and fades;
+// at the tail both settle out over bulgeFadeMs. Wiggle (v0.5.9 tokens) sways the lump.
+const BS = { u: 0, swell: 0, size: 1, alpha: 1, wig: 0 };
 
+function bulgeShape(b, i, now) {
+  const T = TOKEN;
+  const frac = b.spawnLen > 1 ? Math.min(1, b.progress / (b.spawnLen - 1)) : 1;
+  const k = b.fading ? Math.max(0, 1 - (now - b.fadeStart) / T.bulgeFadeMs) : 1;
+  BS.u = bulgeU(b.progress);
+  BS.swell = cellSize * (T.bulgeSwellStart + (T.bulgeSwellEnd - T.bulgeSwellStart) * frac) * k;
+  BS.size = 1 + (T.bulgeTintEndScale - 1) * frac;
+  BS.alpha = (T.bulgeTintAlphaStart + (T.bulgeTintAlphaEnd - T.bulgeTintAlphaStart) * frac) * k;
+  BS.wig = Math.sin(i * T.wigglePhaseStep + (now - b.spawnTime) * 2 * Math.PI * T.wiggleFreqHz / 1000)
+    * cellSize * T.wiggleAmpFactor * BS.size;
+}
+
+// Add every bulge's swell circles (base radius `half`) to a fresh canvas path.
+function swellPath(half, now) {
+  const L = TOKEN.bulgeSwellHalfLen;
+  ctx.beginPath();
   for (let i = 0; i < bulges.length; i++) {
-    const b = bulges[i];
-    pathPt(bulgeU(b.progress));
-    const pt = PP;
+    bulgeShape(bulges[i], i, now);
+    if (BS.swell <= 0) continue;
+    for (let j = -6; j <= 6; j++) {
+      const u = BS.u + L * j / 6;
+      if (u < pathUH || u > pathUT) continue;
+      pathPt(u);
+      const c = Math.cos(Math.PI * j / 12);
+      const r = half + BS.swell * c * c;
+      const x = PP.x - PP.ty * BS.wig, y = PP.y + PP.tx * BS.wig;
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+  }
+}
 
-    const progressFrac = b.spawnLen > 1
-      ? b.progress / (b.spawnLen - 1)
-      : 1;
-
-    const s = b.fading
-      ? TOKEN.bulgeMinScale
-      : TOKEN.bulgeMaxScale + (TOKEN.bulgeMinScale - TOKEN.bulgeMaxScale) * progressFrac;
-
-    const alpha = b.fading
-      ? Math.max(0, 1 - (now - b.fadeStart) / TOKEN.bulgeFadeMs)
-      : 1.0;
-
-    const shortAxis = bulgeWidthCap * s;
-    const longAxis = shortAxis * TOKEN.bulgeAspect;
-
-    // v0.5.7 wiggle: perpendicular sine offset
-    // normal vector is perpendicular to tangent (tx, ty): (-ty, tx)
-    const tLen = Math.sqrt(pt.tx * pt.tx + pt.ty * pt.ty) || 1;
-    const nx = -pt.ty / tLen;
-    const ny =  pt.tx / tLen;
-
-    const phase = i * TOKEN.wigglePhaseStep + (now - b.spawnTime) * 2 * Math.PI * TOKEN.wiggleFreqHz / 1000;
-    const wiggleAmp = cellSize * TOKEN.wiggleAmpFactor * (s / TOKEN.bulgeMaxScale);
-    const wiggleOffset = Math.sin(phase) * wiggleAmp;
-
-    const drawX = pt.x + nx * wiggleOffset;
-    const drawY = pt.y + ny * wiggleOffset;
-
+// The fruit seen through the swollen body (drawn over the body, under the head).
+function drawBulges(now) {
+  for (let i = 0; i < bulges.length; i++) {
+    bulgeShape(bulges[i], i, now);
+    if (BS.alpha <= 0) continue;
+    pathPt(BS.u);
+    const r = cellSize * TOKEN.bulgeTintRadius * BS.size;
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = BS.alpha;
     ctx.fillStyle = TOKEN.bulgeFill;
-    ctx.translate(drawX, drawY);
-    ctx.rotate(Math.atan2(pt.ty, pt.tx));
+    ctx.translate(PP.x - PP.ty * BS.wig, PP.y + PP.tx * BS.wig);
+    ctx.rotate(Math.atan2(PP.ty, PP.tx));
     ctx.beginPath();
-    ctx.ellipse(0, 0, longAxis / 2, shortAxis / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, r * TOKEN.bulgeAspect, r, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -896,7 +911,7 @@ function computeYawn(now) {
 
 // drawSnakeBody: the whole body as one capsule stroke along the rounded path
 // (v0.6.4 — every corner rounds, neck and tail included; buildPath() runs first).
-function drawSnakeBody() {
+function drawSnakeBody(now) {
   const bodyThickness = cellSize * TOKEN.bodyThicknessFactor;
   function strokeBody(lineW, color) {
     ctx.beginPath();
@@ -906,6 +921,10 @@ function drawSnakeBody() {
     ctx.lineJoin = "round";
     tracePath(pathUH, pathUT);
     ctx.stroke();
+    // digestion swell in the same pass/colour, so the outline itself bulges
+    swellPath(lineW / 2, now);
+    ctx.fillStyle = color;
+    ctx.fill();
   }
 
   // Shadow pass: slightly wider, offset down by 1px
@@ -1141,7 +1160,7 @@ function draw(now) {
     drawApple(fx, fy, now, i * 0.7); // per-fruit wobble phase offset (anti-sync)
   }
   buildPath(); // v0.6.4 — once per frame, shared by body, bulges and head
-  drawSnakeBody();
+  drawSnakeBody(now);
   drawBulges(now);
   drawSnakeHead(now);
   drawTouchHint(now);
