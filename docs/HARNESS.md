@@ -69,4 +69,4 @@ If a step has nothing to do (e.g. a version with no visual work), the correspond
 - `GAME_VERSION` in `game.js` is the only place the version is written (the page label and the Android version are derived from it); the `HISTORY.md` heading must agree with it.
 - No direct pushes to `main` from anyone. Always via PR.
 - No build tooling. No frameworks. Vanilla JS until explicitly approved otherwise.
-- Total page payload stays under ~75 KB through v1.0 unless the Dev Lead justifies an exception.
+- Total page payload stays under ~80 KB through v1.0 unless the Dev Lead justifies an exception. (Raised from ~75 KB in v0.6.4 with the owner's approval: the rounded-body and swelling-digestion rendering brings the page to about 77 KB.)

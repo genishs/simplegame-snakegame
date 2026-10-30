@@ -1,7 +1,7 @@
 // Single source of truth for the version (issue #26). The page's version label is
 // filled from this, and android/app/build.gradle.kts parses this exact line to
 // derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
-const GAME_VERSION = '0.6.3';
+const GAME_VERSION = '0.6.4';
 
 const versionEl = document.getElementById("version");
 if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
@@ -90,14 +90,24 @@ const TOKEN = {
   headTongueOn: 120,
   // v0.5.2 body token (factor; actual = cellSize * 0.86)
   bodyThicknessFactor: 0.86,
+  // v0.6.4 rounded path: a late turn press still bends in over at least this many ticks
+  bendMinTicks: 0.4,
+  // Corner arc radius in cells (≤ 1). Auto-clamped to 0.5 where two corners are
+  // adjacent, so back-to-back turns never overlap.
+  cornerRadiusFactor: 0.65,
   // v0.5.3 digestion bulge tokens
   bulgeFlowSpeed: 2.0,
-  bulgeMaxScale: 0.80,
-  bulgeMinScale: 0.60,
   bulgeFadeMs: 200,
   bulgeFill: "#d76461",
   bulgeAspect: 1.15,
-  bulgeWidthCapFactor: 0.86 * 0.95, // actual = cellSize * factor
+  // v0.6.4 swelling lump (cell-relative; replaces bulgeMax/MinScale + WidthCapFactor)
+  bulgeSwellStart: 0.17,   // extra half-width at the head → 1.20 cells wide (body 0.86)
+  bulgeSwellEnd: 0.05,     // extra half-width at the tail → 0.96 cells wide
+  bulgeSwellHalfLen: 0.8,  // swell reach along the body, each side, in cells
+  bulgeTintRadius: 0.30,   // fruit seen inside: half-height at spawn (×cell)
+  bulgeTintEndScale: 0.6,  // fruit size at the tail, relative to spawn
+  bulgeTintAlphaStart: 0.9,
+  bulgeTintAlphaEnd: 0.12,
   // v0.5.7 wiggle tokens (v0.5.9: 절제 — 토큰 값만 하향, drawBulges 구조 불변)
   wiggleAmpFactor: 0.07,    // was 0.15 — amplitude = cellSize * 0.07 (~1.4px peak)
   wiggleFreqHz: 1.5,        // was 2.0 — 속도 절제 (full cycle 667ms)
@@ -203,8 +213,16 @@ let renderT = 0;
 let prevState = null;
 let hostKeepAwake = null; // v0.6.2 (#28) — last value sent to Android.setKeepScreenOn
 
+// v0.6.4 — rounded-path render state. tailTrail = the cell the tail sat in before its
+// current one, so the last body cell can round its corner too (render-only).
+let tailCell = null;
+let tailTrail = null;
+
 function snapshotSnake() {
   prevSnake = snake.map((s) => ({ x: s.x, y: s.y }));
+  const t = snake[snake.length - 1];
+  if (tailCell && (tailCell.x !== t.x || tailCell.y !== t.y)) tailTrail = tailCell;
+  tailCell = { x: t.x, y: t.y };
 }
 
 function init() {
@@ -253,6 +271,7 @@ function loadStage(idx) {
   }
   dir = { x: 1, y: 0 };
   nextDir = dir;
+  tailCell = tailTrail = null; // v0.6.4
   tickAccum = 0;
   fruitMoveAccum = 0; // v0.6.0 — reset moving-fruit drift timer per stage
   bulges.length = 0;
@@ -602,26 +621,162 @@ function getStageOffset() {
   };
 }
 
-// Task 1 — module-scope cell center helpers
-// v0.5.8 — optional index `i` lerps the grid coord from prevSnake[i] → snake[i] by
-// renderT. Falls back to the static coord when i is omitted, renderT is 0, or
-// either snapshot is missing (growth's new tail / length-mismatch frame).
-function interpGrid(seg, i, axis) {
-  if (renderT <= 0 || i == null) return seg[axis];
-  const p = prevSnake[i];
-  const c = snake[i];
-  if (!p || !c) return seg[axis];
-  return p[axis] + (c[axis] - p[axis]) * renderT;
+// v0.6.4 (#45) — the body is one path through cell centers whose corners are quarter
+// arcs (radius ½ cell). Path param u: cell k of the chain sits at u = k (0 = head
+// cell), its edges at k ± ½. Only the two ends slide by renderT, so the body glides
+// along the curve instead of each segment lerping straight across a corner (v0.5.8).
+// Chain = snake (+ the cell the tail is leaving), stored from index 1; [0] is the cell
+// ahead of the head, [m+2] the cell behind the tail. Reused buffers (no per-frame alloc).
+let chX = new Int16Array(64);
+let chY = new Int16Array(64);
+let chR = new Float32Array(64); // per-cell corner radius in cells, 0 = straight
+let chM = 0;        // last chain cell index
+let pathBeta = 1;   // how far the head cell has bent toward a pending turn (0..1)
+let pathUH = 0;     // head-end u
+let pathUT = 0;     // tail-end u
+let pathOff = 0;    // u of snake[0] at this frame (index space → path space)
+// Pending-turn tracking for pathBeta: the cell that bends, the press point on a
+// continuous clock (ticks + renderT), and the ramp length in ticks.
+let antX = 1, antY = 0, bendX = -1, bendY = -1, bendP0 = 0, bendSpan = 1;
+let pathTicks = 0, pathPrev = null;
+const PP = { x: 0, y: 0, tx: 1, ty: 0 }; // pathPt() result, pixels + unit tangent
+
+function buildPath() {
+  const n = snake.length;
+  const p = prevSnake;
+  // moving = a real tick happened since the snapshot (its old head is our neck); a stale
+  // snapshot (e.g. the frame a new stage loads) renders static.
+  const moving = state === STATE.PLAYING && p.length > 0
+    && p[0].x === snake[1].x && p[0].y === snake[1].y;
+  const t = moving && renderT > 0 ? renderT : 1;
+  const q = p[n - 1];
+  const extra = moving && p.length === n
+    && Math.abs(q.x - snake[n - 1].x) + Math.abs(q.y - snake[n - 1].y) === 1 ? 1 : 0; // tail leaving q
+  const m = n - 1 + extra;
+  if (chX.length < m + 3) {
+    chX = new Int16Array(m * 2 + 8); chY = new Int16Array(m * 2 + 8);
+    chR = new Float32Array(m * 2 + 8);
+  }
+  for (let k = 0; k < n; k++) { chX[k + 1] = snake[k].x; chY[k + 1] = snake[k].y; }
+  if (extra) { chX[n + 1] = p[n - 1].x; chY[n + 1] = p[n - 1].y; }
+  // Behind the tail: the cell it came from (so its last corner rounds), else straight.
+  const lx = chX[m + 1], ly = chY[m + 1];
+  const tr = tailTrail;
+  if (tr && Math.abs(tr.x - lx) + Math.abs(tr.y - ly) === 1 && (tr.x !== chX[m] || tr.y !== chY[m])) {
+    chX[m + 2] = tr.x; chY[m + 2] = tr.y;
+  } else {
+    chX[m + 2] = 2 * lx - chX[m]; chY[m + 2] = 2 * ly - chY[m];
+  }
+  // Ahead of the head: a pending ±90° turn (nextDir) bends the head cell, blended in
+  // from the moment it was pressed (pathBeta 0→1, done by the tick or after
+  // TOKEN.bendMinTicks for a late press) so the head never jumps. Otherwise straight.
+  const dx = chX[1] - chX[2], dy = chY[1] - chY[2];
+  const turn = nextDir.x * dx + nextDir.y * dy === 0;
+  chX[0] = chX[1] + (turn ? nextDir.x : dx);
+  chY[0] = chY[1] + (turn ? nextDir.y : dy);
+  if (p !== pathPrev) { pathPrev = p; pathTicks++; }
+  const r = moving ? t : renderT;
+  const clock = pathTicks + (r >= 1 ? 0.999 : r);
+  if (state !== STATE.PLAYING) {
+    bendX = -1;
+  } else if (nextDir.x !== antX || nextDir.y !== antY) {
+    bendX = chX[1]; bendY = chY[1]; bendP0 = clock;
+    bendSpan = Math.max(TOKEN.bendMinTicks, 1 - r);
+  }
+  antX = nextDir.x; antY = nextDir.y;
+  pathBeta = Math.min(1, Math.max(0, (clock - bendP0) / bendSpan));
+  chM = m;
+  pathOff = moving ? 1 - t : 0;
+  pathUH = pathOff;
+  pathUT = moving && extra ? n - t : n - 1;
+  // Per-corner radius. A corner's arc owns u ∈ [k − r, k + r], so two of them one cell
+  // apart overlap above r = ½ and both pull back to ½; ≥ 2 apart always fit (r ≤ 1).
+  const rad = Math.min(1, TOKEN.cornerRadiusFactor);
+  for (let k = 0; k <= m; k++) chR[k] = cornerAt(k) ? rad : 0;
+  if (rad > 0.5) {
+    for (let k = 0; k <= m; k++) {
+      if (chR[k] > 0) chR[k] = rad + (0.5 - rad) * Math.max(cornerW(k - 1), cornerW(k + 1));
+    }
+  }
 }
 
-function cellCenterX(seg, i) {
-  const off = getStageOffset();
-  return off.x + interpGrid(seg, i, "x") * cellSize + cellSize / 2;
+// Is chain cell k a corner (travel turns 90° inside it)?
+function cornerAt(k) {
+  const j = k + 1;
+  const ix = chX[j] - chX[j + 1], iy = chY[j] - chY[j + 1];
+  const ox = chX[j - 1] - chX[j], oy = chY[j - 1] - chY[j];
+  return (ix || iy) !== 0 && (ox || oy) !== 0 && ix * ox + iy * oy === 0;
 }
 
-function cellCenterY(seg, i) {
+// How far corner k's center sits inside the drawn range: 0 at the very end, 1 once it
+// is half a cell in. A corner pulls its neighbour's radius back toward ½ in proportion,
+// so no radius jumps when a corner appears at the head or leaves at the tail, and a
+// pair that still sums over 1 only overlaps outside [pathUH, pathUT].
+function cornerW(k) {
+  if (k < 0 || k > chM || chR[k] <= 0) return 0;
+  const w = 2 - 2 * Math.max(k - pathUT, pathUH - k);
+  return w < 0 ? 0 : w > 1 ? 1 : w;
+}
+
+// Point + unit tangent (pointing headward) at path param u → PP.
+function pathPt(u) {
+  let k = Math.round(u);
+  if (k < 0) k = 0; else if (k > chM) k = chM;
+  // The corner owning u, if any: arcs never overlap and reach at most one cell away.
+  let g = -1;
+  for (let d = -1; d <= 1; d++) {
+    const kk = k + d;
+    if (kk < 0 || kk > chM) continue;
+    const r = chR[kk];
+    if (r > 0 && u > kk - r - 1e-9 && u < kk + r + 1e-9) { g = kk; break; }
+  }
+  const kc = g < 0 ? k : g;
+  const j = kc + 1, cx = chX[j], cy = chY[j];
+  const ix = cx - chX[j + 1], iy = cy - chY[j + 1]; // incoming (headward) direction
+  const ox = chX[j - 1] - cx, oy = chY[j - 1] - cy; // outgoing (headward) direction
+  // Base line: incoming side behind the center, outgoing ahead of it. Inside an arc it
+  // is the un-turned incoming line, which a pending turn (pathBeta < 1) blends from.
+  const back = g >= 0 || u >= kc;
+  const dx = back ? ix : ox, dy = back ? iy : oy;
+  let x = cx + (kc - u) * dx, y = cy + (kc - u) * dy, tx = dx, ty = dy;
+  if (g >= 0) {
+    const r = chR[g];
+    const b = cx === bendX && cy === bendY ? pathBeta : 1;
+    let w = (g + r - u) / (2 * r); // 0 = incoming tangent point, 1 = outgoing one
+    w = w < 0 ? 0 : w > 1 ? 1 : w;
+    const f = w * Math.PI / 2, c = Math.cos(f), s = Math.sin(f);
+    // arc of radius r about O = center + r·(out − in), tangent to both straights
+    x += (cx + r * (ox - ix - ox * c + ix * s) - x) * b;
+    y += (cy + r * (oy - iy - oy * c + iy * s) - y) * b;
+    tx += (ix * c + ox * s - tx) * b;
+    ty += (iy * c + oy * s - ty) * b;
+  }
+  const tl = Math.sqrt(tx * tx + ty * ty) || 1;
   const off = getStageOffset();
-  return off.y + interpGrid(seg, i, "y") * cellSize + cellSize / 2;
+  PP.x = off.x + (x + 0.5) * cellSize;
+  PP.y = off.y + (y + 0.5) * cellSize;
+  PP.tx = tx / tl;
+  PP.ty = ty / tl;
+}
+
+// Trace u0→u1 into the canvas path: one lineTo per straight run, 6 per quarter arc.
+function tracePath(u0, u1) {
+  pathPt(u0);
+  ctx.moveTo(PP.x, PP.y);
+  let u = u0;
+  const kEnd = Math.min(chM, Math.ceil(u1));
+  for (let k = Math.max(0, Math.floor(u0)); k <= kEnd; k++) {
+    const r = chR[k];
+    if (r <= 0) continue;
+    const a = k - r;
+    if (k + r <= u || a >= u1) continue;
+    if (a > u) { pathPt(a); ctx.lineTo(PP.x, PP.y); u = a; }
+    const e = Math.min(k + r, u1);
+    const n = Math.max(1, Math.ceil(6 * (e - u) / (2 * r)));
+    for (let i = 1; i <= n; i++) { pathPt(u + (e - u) * i / n); ctx.lineTo(PP.x, PP.y); }
+    u = e;
+  }
+  if (u1 > u + 1e-9) { pathPt(u1); ctx.lineTo(PP.x, PP.y); }
 }
 
 // Task 2 — spawnBulge (v0.5.7: spawnTime added for wiggle phase)
@@ -655,77 +810,66 @@ function updateBulges(dt, now) {
   }
 }
 
-// Task 4 — evalBulgePoint: simple linear lerp (corner Bezier deferred)
-function evalBulgePoint(progress, snakeArr) {
-  const len = snakeArr.length;
-  let i = Math.floor(progress);
-  const t = progress - i;
-
-  // clamp to last valid pair
-  if (i >= len - 1) i = len - 2;
-
-  const x0 = cellCenterX(snakeArr[i], i);
-  const y0 = cellCenterY(snakeArr[i], i);
-
-  // If only one segment, return it
-  if (i + 1 >= len) {
-    return { x: x0, y: y0, tx: 1, ty: 0 };
-  }
-
-  const x1 = cellCenterX(snakeArr[i + 1], i + 1);
-  const y1 = cellCenterY(snakeArr[i + 1], i + 1);
-
-  return {
-    x: x0 + (x1 - x0) * t,
-    y: y0 + (y1 - y0) * t,
-    tx: x1 - x0,
-    ty: y1 - y0,
-  };
+// v0.6.4 — bulge progress is in snake-index space; map it onto the rounded path so the
+// lump follows the same curve as the body (was a straight lerp between centers).
+function bulgeU(progress) {
+  return Math.min(pathUT, Math.max(pathUH, progress + pathOff));
 }
 
-// Task 5 — drawBulges (v0.5.7: wiggle added)
-function drawBulges(now) {
-  const bulgeWidthCap = cellSize * TOKEN.bulgeWidthCapFactor;
+// v0.6.4 (#45) — the digestion lump is the body outline itself swelling: per bulge, 13
+// circles along the path whose radius rises from the body half-width to a cos² peak,
+// filled in the body's own shadow/green passes (one path per pass, so no alpha build-
+// up) — one bulging tube that follows corners. The fruit shows through as a bulgeFill
+// ellipse. Along the way (frac 0→1) the swell flattens and the fruit shrinks and fades;
+// at the tail both settle out over bulgeFadeMs. Wiggle (v0.5.9 tokens) sways the lump.
+const BS = { u: 0, swell: 0, size: 1, alpha: 1, wig: 0 };
 
+function bulgeShape(b, i, now) {
+  const T = TOKEN;
+  const frac = b.spawnLen > 1 ? Math.min(1, b.progress / (b.spawnLen - 1)) : 1;
+  const k = b.fading ? Math.max(0, 1 - (now - b.fadeStart) / T.bulgeFadeMs) : 1;
+  BS.u = bulgeU(b.progress);
+  BS.swell = cellSize * (T.bulgeSwellStart + (T.bulgeSwellEnd - T.bulgeSwellStart) * frac) * k;
+  BS.size = 1 + (T.bulgeTintEndScale - 1) * frac;
+  BS.alpha = (T.bulgeTintAlphaStart + (T.bulgeTintAlphaEnd - T.bulgeTintAlphaStart) * frac) * k;
+  BS.wig = Math.sin(i * T.wigglePhaseStep + (now - b.spawnTime) * 2 * Math.PI * T.wiggleFreqHz / 1000)
+    * cellSize * T.wiggleAmpFactor * BS.size;
+}
+
+// Add every bulge's swell circles (base radius `half`) to a fresh canvas path.
+function swellPath(half, now) {
+  const L = TOKEN.bulgeSwellHalfLen;
+  ctx.beginPath();
   for (let i = 0; i < bulges.length; i++) {
-    const b = bulges[i];
-    const pt = evalBulgePoint(b.progress, snake);
+    bulgeShape(bulges[i], i, now);
+    if (BS.swell <= 0) continue;
+    for (let j = -6; j <= 6; j++) {
+      const u = BS.u + L * j / 6;
+      if (u < pathUH || u > pathUT) continue;
+      pathPt(u);
+      const c = Math.cos(Math.PI * j / 12);
+      const r = half + BS.swell * c * c;
+      const x = PP.x - PP.ty * BS.wig, y = PP.y + PP.tx * BS.wig;
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+  }
+}
 
-    const progressFrac = b.spawnLen > 1
-      ? b.progress / (b.spawnLen - 1)
-      : 1;
-
-    const s = b.fading
-      ? TOKEN.bulgeMinScale
-      : TOKEN.bulgeMaxScale + (TOKEN.bulgeMinScale - TOKEN.bulgeMaxScale) * progressFrac;
-
-    const alpha = b.fading
-      ? Math.max(0, 1 - (now - b.fadeStart) / TOKEN.bulgeFadeMs)
-      : 1.0;
-
-    const shortAxis = bulgeWidthCap * s;
-    const longAxis = shortAxis * TOKEN.bulgeAspect;
-
-    // v0.5.7 wiggle: perpendicular sine offset
-    // normal vector is perpendicular to tangent (tx, ty): (-ty, tx)
-    const tLen = Math.sqrt(pt.tx * pt.tx + pt.ty * pt.ty) || 1;
-    const nx = -pt.ty / tLen;
-    const ny =  pt.tx / tLen;
-
-    const phase = i * TOKEN.wigglePhaseStep + (now - b.spawnTime) * 2 * Math.PI * TOKEN.wiggleFreqHz / 1000;
-    const wiggleAmp = cellSize * TOKEN.wiggleAmpFactor * (s / TOKEN.bulgeMaxScale);
-    const wiggleOffset = Math.sin(phase) * wiggleAmp;
-
-    const drawX = pt.x + nx * wiggleOffset;
-    const drawY = pt.y + ny * wiggleOffset;
-
+// The fruit seen through the swollen body (drawn over the body, under the head).
+function drawBulges(now) {
+  for (let i = 0; i < bulges.length; i++) {
+    bulgeShape(bulges[i], i, now);
+    if (BS.alpha <= 0) continue;
+    pathPt(BS.u);
+    const r = cellSize * TOKEN.bulgeTintRadius * BS.size;
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = BS.alpha;
     ctx.fillStyle = TOKEN.bulgeFill;
-    ctx.translate(drawX, drawY);
-    ctx.rotate(Math.atan2(pt.ty, pt.tx));
+    ctx.translate(PP.x - PP.ty * BS.wig, PP.y + PP.tx * BS.wig);
+    ctx.rotate(Math.atan2(PP.ty, PP.tx));
     ctx.beginPath();
-    ctx.ellipse(0, 0, longAxis / 2, shortAxis / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, r * TOKEN.bulgeAspect, r, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -779,14 +923,6 @@ function roundedRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-// angleFromDir: direction vector → rotation angle in radians
-// No per-call allocation; uses direct lookup on fields.
-function angleFromDir(dir) {
-  if (dir.x === 1)  return 0;
-  if (dir.x === -1) return Math.PI;
-  if (dir.y === 1)  return Math.PI * 0.5;
-  return Math.PI * 1.5; // dir.y === -1
-}
 
 // computePulse: returns eat-pulse scale (1.0 to eatPulseScale triangle)
 function computePulse(now) {
@@ -823,57 +959,22 @@ function computeYawn(now) {
   return [sx, sy];
 }
 
-// drawSnakeBody: draws body segments [1..len-1] as a single capsule stroke
-// Uses module-scope cellCenterX / cellCenterY helpers (Task 1)
-function drawSnakeBody(snakeArr) {
-  const len = snakeArr.length;
-  if (len < 2) return;
-
+// drawSnakeBody: the whole body as one capsule stroke along the rounded path
+// (v0.6.4 — every corner rounds, neck and tail included; buildPath() runs first).
+function drawSnakeBody(now) {
   const bodyThickness = cellSize * TOKEN.bodyThicknessFactor;
-
-  // Helper: midpoint between two cell centers (by index, so the tween applies)
-  function midX(ia, ib) { return (cellCenterX(snakeArr[ia], ia) + cellCenterX(snakeArr[ib], ib)) / 2; }
-  function midY(ia, ib) { return (cellCenterY(snakeArr[ia], ia) + cellCenterY(snakeArr[ib], ib)) / 2; }
-
   function strokeBody(lineW, color) {
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = lineW;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-
-    // Start at the midpoint between head (index 0) and first body segment (index 1)
-    ctx.moveTo(midX(0, 1), midY(0, 1));
-
-    for (let i = 1; i < len; i++) {
-      const seg = snakeArr[i];
-      const cx = cellCenterX(seg, i);
-      const cy = cellCenterY(seg, i);
-
-      // Determine whether this segment is a corner:
-      // Interior segments only (i in [2..len-3]), not tail (len-1), not tail-adjacent (len-2)
-      const isInterior = i >= 2 && i <= len - 3;
-      let isCorner = false;
-      if (isInterior) {
-        const prev = snakeArr[i - 1];
-        const next = snakeArr[i + 1];
-        const pdx = seg.x - prev.x;
-        const pdy = seg.y - prev.y;
-        const ndx = next.x - seg.x;
-        const ndy = next.y - seg.y;
-        isCorner = (pdx !== ndx || pdy !== ndy);
-      }
-
-      if (isCorner) {
-        // quadraticCurveTo: control point = cell center, end = midpoint to next segment
-        ctx.quadraticCurveTo(cx, cy, midX(i, i + 1), midY(i, i + 1));
-      } else {
-        // Straight segment, tail-adjacent, or tail: lineTo center
-        ctx.lineTo(cx, cy);
-      }
-    }
-
+    tracePath(pathUH, pathUT);
     ctx.stroke();
+    // digestion swell in the same pass/colour, so the outline itself bulges
+    swellPath(lineW / 2, now);
+    ctx.fillStyle = color;
+    ctx.fill();
   }
 
   // Shadow pass: slightly wider, offset down by 1px
@@ -887,10 +988,12 @@ function drawSnakeBody(snakeArr) {
 }
 
 // drawSnakeHead: egg-shape ellipse head with eyes and tongue
-function drawSnakeHead(head, direction, now) {
-  // v0.5.8 — head position (index 0) tweens; rotation stays an instant switch on dir.
-  const cx = cellCenterX(head, 0);
-  const cy = cellCenterY(head, 0);
+function drawSnakeHead(now) {
+  // v0.6.4 — the head rides the front end of the rounded body path and faces along
+  // its tangent, so it turns through a corner instead of snapping 90° on the tick.
+  pathPt(pathUH);
+  const cx = PP.x;
+  const cy = PP.y;
 
   const pulse = computePulse(now);
   const [sx, sy] = computeSquash(now);
@@ -903,7 +1006,7 @@ function drawSnakeHead(head, direction, now) {
 
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(angleFromDir(direction));
+  ctx.rotate(Math.atan2(PP.ty, PP.tx));
   // facing axis = local +x (post-rotate), so yawn facing scale multiplies x.
   ctx.scale(pulse * sx * yx, pulse * sy * yy);
 
@@ -1106,9 +1209,10 @@ function draw(now) {
     const fy = f.py + (f.y - f.py) * interp;
     drawApple(fx, fy, now, i * 0.7); // per-fruit wobble phase offset (anti-sync)
   }
-  drawSnakeBody(snake);
+  buildPath(); // v0.6.4 — once per frame, shared by body, bulges and head
+  drawSnakeBody(now);
   drawBulges(now);
-  drawSnakeHead(snake[0], dir, now);
+  drawSnakeHead(now);
   drawTouchHint(now);
   // TODO 12 — draw countdown overlay
   if (state === STATE.COUNTDOWN) drawCountdown(now);
