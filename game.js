@@ -92,6 +92,9 @@ const TOKEN = {
   bodyThicknessFactor: 0.86,
   // v0.6.4 rounded path: a late turn press still bends in over at least this many ticks
   bendMinTicks: 0.4,
+  // Corner arc radius in cells (≤ 1). Auto-clamped to 0.5 where two corners are
+  // adjacent, so back-to-back turns never overlap.
+  cornerRadiusFactor: 0.65,
   // v0.5.3 digestion bulge tokens
   bulgeFlowSpeed: 2.0,
   bulgeFadeMs: 200,
@@ -626,6 +629,7 @@ function getStageOffset() {
 // ahead of the head, [m+2] the cell behind the tail. Reused buffers (no per-frame alloc).
 let chX = new Int16Array(64);
 let chY = new Int16Array(64);
+let chR = new Float32Array(64); // per-cell corner radius in cells, 0 = straight
 let chM = 0;        // last chain cell index
 let pathBeta = 1;   // how far the head cell has bent toward a pending turn (0..1)
 let pathUH = 0;     // head-end u
@@ -649,7 +653,10 @@ function buildPath() {
   const extra = moving && p.length === n
     && Math.abs(q.x - snake[n - 1].x) + Math.abs(q.y - snake[n - 1].y) === 1 ? 1 : 0; // tail leaving q
   const m = n - 1 + extra;
-  if (chX.length < m + 3) { chX = new Int16Array(m * 2 + 8); chY = new Int16Array(m * 2 + 8); }
+  if (chX.length < m + 3) {
+    chX = new Int16Array(m * 2 + 8); chY = new Int16Array(m * 2 + 8);
+    chR = new Float32Array(m * 2 + 8);
+  }
   for (let k = 0; k < n; k++) { chX[k + 1] = snake[k].x; chY[k + 1] = snake[k].y; }
   if (extra) { chX[n + 1] = p[n - 1].x; chY[n + 1] = p[n - 1].y; }
   // Behind the tail: the cell it came from (so its last corner rounds), else straight.
@@ -682,6 +689,15 @@ function buildPath() {
   pathOff = moving ? 1 - t : 0;
   pathUH = pathOff;
   pathUT = moving && extra ? n - t : n - 1;
+  // Per-corner radius. A corner's arc owns u ∈ [k − r, k + r], so two of them one cell
+  // apart overlap above r = ½ and both pull back to ½; ≥ 2 apart always fit (r ≤ 1).
+  const rad = Math.min(1, TOKEN.cornerRadiusFactor);
+  for (let k = 0; k <= m; k++) chR[k] = cornerAt(k) ? rad : 0;
+  if (rad > 0.5) {
+    for (let k = 0; k <= m; k++) {
+      if (chR[k] > 0) chR[k] = rad + (0.5 - rad) * Math.max(cornerW(k - 1), cornerW(k + 1));
+    }
+  }
 }
 
 // Is chain cell k a corner (travel turns 90° inside it)?
@@ -692,22 +708,46 @@ function cornerAt(k) {
   return (ix || iy) !== 0 && (ox || oy) !== 0 && ix * ox + iy * oy === 0;
 }
 
+// How far corner k's center sits inside the drawn range: 0 at the very end, 1 once it
+// is half a cell in. A corner pulls its neighbour's radius back toward ½ in proportion,
+// so no radius jumps when a corner appears at the head or leaves at the tail, and a
+// pair that still sums over 1 only overlaps outside [pathUH, pathUT].
+function cornerW(k) {
+  if (k < 0 || k > chM || chR[k] <= 0) return 0;
+  const w = 2 - 2 * Math.max(k - pathUT, pathUH - k);
+  return w < 0 ? 0 : w > 1 ? 1 : w;
+}
+
 // Point + unit tangent (pointing headward) at path param u → PP.
 function pathPt(u) {
-  let k = Math.floor(u + 0.5);
+  let k = Math.round(u);
   if (k < 0) k = 0; else if (k > chM) k = chM;
-  let w = k + 0.5 - u; // 0 = tail-side edge, 1 = head-side edge
-  w = w < 0 ? 0 : w > 1 ? 1 : w;
-  const j = k + 1, cx = chX[j], cy = chY[j];
-  const ix = cx - chX[j + 1], iy = cy - chY[j + 1];
-  let x = cx + (w - 0.5) * ix, y = cy + (w - 0.5) * iy, tx = ix, ty = iy;
-  if (cornerAt(k)) {
-    const ox = chX[j - 1] - cx, oy = chY[j - 1] - cy;
+  // The corner owning u, if any: arcs never overlap and reach at most one cell away.
+  let g = -1;
+  for (let d = -1; d <= 1; d++) {
+    const kk = k + d;
+    if (kk < 0 || kk > chM) continue;
+    const r = chR[kk];
+    if (r > 0 && u > kk - r - 1e-9 && u < kk + r + 1e-9) { g = kk; break; }
+  }
+  const kc = g < 0 ? k : g;
+  const j = kc + 1, cx = chX[j], cy = chY[j];
+  const ix = cx - chX[j + 1], iy = cy - chY[j + 1]; // incoming (headward) direction
+  const ox = chX[j - 1] - cx, oy = chY[j - 1] - cy; // outgoing (headward) direction
+  // Base line: incoming side behind the center, outgoing ahead of it. Inside an arc it
+  // is the un-turned incoming line, which a pending turn (pathBeta < 1) blends from.
+  const back = g >= 0 || u >= kc;
+  const dx = back ? ix : ox, dy = back ? iy : oy;
+  let x = cx + (kc - u) * dx, y = cy + (kc - u) * dy, tx = dx, ty = dy;
+  if (g >= 0) {
+    const r = chR[g];
     const b = cx === bendX && cy === bendY ? pathBeta : 1;
+    let w = (g + r - u) / (2 * r); // 0 = incoming tangent point, 1 = outgoing one
+    w = w < 0 ? 0 : w > 1 ? 1 : w;
     const f = w * Math.PI / 2, c = Math.cos(f), s = Math.sin(f);
-    // quarter arc about the cell corner O = center + (out − in)/2
-    x += (cx + (ox - ix - ox * c + ix * s) / 2 - x) * b;
-    y += (cy + (oy - iy - oy * c + iy * s) / 2 - y) * b;
+    // arc of radius r about O = center + r·(out − in), tangent to both straights
+    x += (cx + r * (ox - ix - ox * c + ix * s) - x) * b;
+    y += (cy + r * (oy - iy - oy * c + iy * s) - y) * b;
     tx += (ix * c + ox * s - tx) * b;
     ty += (iy * c + oy * s - ty) * b;
   }
@@ -719,18 +759,24 @@ function pathPt(u) {
   PP.ty = ty / tl;
 }
 
-// Trace the path from u0 to u1 into the current canvas path (corners in 6 steps).
+// Trace u0→u1 into the canvas path: one lineTo per straight run, 6 per quarter arc.
 function tracePath(u0, u1) {
   pathPt(u0);
   ctx.moveTo(PP.x, PP.y);
   let u = u0;
-  while (u < u1 - 1e-6) {
-    const k = Math.floor(u + 0.5);
-    const end = Math.min(k + 0.5, u1);
-    u = cornerAt(k) ? Math.min(u + 1 / 6, end) : end;
-    pathPt(u);
-    ctx.lineTo(PP.x, PP.y);
+  const kEnd = Math.min(chM, Math.ceil(u1));
+  for (let k = Math.max(0, Math.floor(u0)); k <= kEnd; k++) {
+    const r = chR[k];
+    if (r <= 0) continue;
+    const a = k - r;
+    if (k + r <= u || a >= u1) continue;
+    if (a > u) { pathPt(a); ctx.lineTo(PP.x, PP.y); u = a; }
+    const e = Math.min(k + r, u1);
+    const n = Math.max(1, Math.ceil(6 * (e - u) / (2 * r)));
+    for (let i = 1; i <= n; i++) { pathPt(u + (e - u) * i / n); ctx.lineTo(PP.x, PP.y); }
+    u = e;
   }
+  if (u1 > u + 1e-9) { pathPt(u1); ctx.lineTo(PP.x, PP.y); }
 }
 
 // Task 2 — spawnBulge (v0.5.7: spawnTime added for wiggle phase)
