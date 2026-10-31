@@ -168,6 +168,7 @@ class MainActivity : AppCompatActivity() {
  * exists, so the web build is unaffected):
  * - vibrate(ms): short haptic on fruit eat / game over.
  * - setKeepScreenOn(on): keep the display awake only while a run is in progress.
+ * - saveBest(score) / getBest(): best score in SharedPreferences (#35).
  * Bridge methods run on a WebView binder thread, never the UI thread.
  */
 class HostBridge(private val activity: Activity) {
@@ -200,7 +201,27 @@ class HostBridge(private val activity: Activity) {
         }
     }
 
+    /**
+     * #35: the best score, kept by the shell as well as in the page's localStorage.
+     * WebView batches localStorage writes, so a force-stop right after game over could
+     * lose a new best. commit() returns only once the value is on disk. The page reads
+     * both on start and keeps the higher one. Stays on the device like localStorage.
+     */
+    private val prefs by lazy { activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+
+    @JavascriptInterface
+    fun saveBest(score: Int) {
+        synchronized(this) {
+            if (score > prefs.getInt(KEY_BEST, 0)) prefs.edit().putInt(KEY_BEST, score).commit()
+        }
+    }
+
+    @JavascriptInterface
+    fun getBest(): Int = prefs.getInt(KEY_BEST, 0)
+
     private companion object {
         const val MAX_VIBRATE_MS = 200L
+        const val PREFS_NAME = "snakegame"
+        const val KEY_BEST = "best"
     }
 }

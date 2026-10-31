@@ -245,6 +245,12 @@ function init() {
   stageIndex = 0;
   score = 0;
   best = Number(localStorage.getItem("snake-best") || 0);
+  // v0.6.5 (#35) — the Android shell keeps its own copy of the best score (written at
+  // once on game over); WebView localStorage can lose a write if the app is killed
+  // right after. Use whichever is higher. Absent in browsers.
+  try {
+    if (typeof Android !== "undefined" && Android.getBest) best = Math.max(best, Number(Android.getBest()) || 0);
+  } catch (_) {}
   applesEaten = 0;
   state = STATE.READY;
   tickAccum = 0;
@@ -418,6 +424,10 @@ function gameOver() {
   bulges.length = 0;
   if (score > best) {
     best = score;
+    // v0.6.5 (#35) — shell copy first: SharedPreferences commit() is on disk on return.
+    try {
+      if (typeof Android !== "undefined" && Android.saveBest) Android.saveBest(best);
+    } catch (_) {}
     localStorage.setItem("snake-best", String(best));
     updateHud();
   }
