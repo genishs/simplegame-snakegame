@@ -640,6 +640,7 @@ let pathOff = 0;    // u of snake[0] at this frame (index space → path space)
 let antX = 1, antY = 0, bendX = -1, bendY = -1, bendP0 = 0, bendSpan = 1;
 let pathTicks = 0, pathPrev = null;
 const PP = { x: 0, y: 0, tx: 1, ty: 0 }; // pathPt() result, pixels + unit tangent
+let pathOX = 0, pathOY = 0; // v0.6.5 (#47) — board offset, set once per frame in buildPath
 
 function buildPath() {
   const n = snake.length;
@@ -686,6 +687,8 @@ function buildPath() {
   antX = nextDir.x; antY = nextDir.y;
   pathBeta = Math.min(1, Math.max(0, (clock - bendP0) / bendSpan));
   chM = m;
+  pathOX = (canvasW - stage.cols * cellSize) / 2;
+  pathOY = (canvasH - stage.rows * cellSize) / 2;
   pathOff = moving ? 1 - t : 0;
   pathUH = pathOff;
   pathUT = moving && extra ? n - t : n - 1;
@@ -752,9 +755,8 @@ function pathPt(u) {
     ty += (iy * c + oy * s - ty) * b;
   }
   const tl = Math.sqrt(tx * tx + ty * ty) || 1;
-  const off = getStageOffset();
-  PP.x = off.x + (x + 0.5) * cellSize;
-  PP.y = off.y + (y + 0.5) * cellSize;
+  PP.x = pathOX + (x + 0.5) * cellSize;
+  PP.y = pathOY + (y + 0.5) * cellSize;
   PP.tx = tx / tl;
   PP.ty = ty / tl;
 }
@@ -822,7 +824,14 @@ function bulgeU(progress) {
 // up) — one bulging tube that follows corners. The fruit shows through as a bulgeFill
 // ellipse. Along the way (frac 0→1) the swell flattens and the fruit shrinks and fades;
 // at the tail both settle out over bulgeFadeMs. Wiggle (v0.5.9 tokens) sways the lump.
+// v0.6.5 (#47) — the circles are computed once per frame into reused buffers (both
+// passes draw the same ones), and lumps get fewer of them when many share the body:
+// 13 for 1–2 lumps, 9 for 3–4, 7 for 5+ (same cos² profile, coarser sampling).
 const BS = { u: 0, swell: 0, size: 1, alpha: 1, wig: 0 };
+const swX = new Float64Array(BULGE_MAX * 13);
+const swY = new Float64Array(BULGE_MAX * 13);
+const swS = new Float64Array(BULGE_MAX * 13);
+let swN = 0;
 
 function bulgeShape(b, i, now) {
   const T = TOKEN;
@@ -836,23 +845,34 @@ function bulgeShape(b, i, now) {
     * cellSize * T.wiggleAmpFactor * BS.size;
 }
 
-// Add every bulge's swell circles (base radius `half`) to a fresh canvas path.
-function swellPath(half, now) {
+// Every bulge's swell circles for this frame → swX/swY (center) + swS (extra radius).
+function prepareSwell(now) {
   const L = TOKEN.bulgeSwellHalfLen;
-  ctx.beginPath();
-  for (let i = 0; i < bulges.length; i++) {
+  const nb = bulges.length;
+  const h = nb <= 2 ? 6 : nb <= 4 ? 4 : 3; // circles per lump = 2h + 1
+  swN = 0;
+  for (let i = 0; i < nb; i++) {
     bulgeShape(bulges[i], i, now);
     if (BS.swell <= 0) continue;
-    for (let j = -6; j <= 6; j++) {
-      const u = BS.u + L * j / 6;
+    for (let j = -h; j <= h; j++) {
+      const u = BS.u + L * j / h;
       if (u < pathUH || u > pathUT) continue;
       pathPt(u);
-      const c = Math.cos(Math.PI * j / 12);
-      const r = half + BS.swell * c * c;
-      const x = PP.x - PP.ty * BS.wig, y = PP.y + PP.tx * BS.wig;
-      ctx.moveTo(x + r, y);
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      const c = Math.cos(Math.PI * j / (2 * h));
+      swX[swN] = PP.x - PP.ty * BS.wig;
+      swY[swN] = PP.y + PP.tx * BS.wig;
+      swS[swN++] = BS.swell * c * c;
     }
+  }
+}
+
+// Add the prepared swell circles (base radius `half`) to a fresh canvas path.
+function swellPath(half) {
+  ctx.beginPath();
+  for (let k = 0; k < swN; k++) {
+    const x = swX[k], y = swY[k], r = half + swS[k];
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
   }
 }
 
@@ -972,10 +992,11 @@ function drawSnakeBody(now) {
     tracePath(pathUH, pathUT);
     ctx.stroke();
     // digestion swell in the same pass/colour, so the outline itself bulges
-    swellPath(lineW / 2, now);
+    swellPath(lineW / 2);
     ctx.fillStyle = color;
     ctx.fill();
   }
+  prepareSwell(now);
 
   // Shadow pass: slightly wider, offset down by 1px
   ctx.save();
