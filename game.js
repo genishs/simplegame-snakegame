@@ -57,6 +57,22 @@ function resizeCanvas() {
 
 window.addEventListener("resize", resizeCanvas);
 
+// v0.6.5 (#40) — the CSS board size assumes a one-line HUD. When a narrow screen wraps
+// it (long stage name, big scores), report the extra height as --hud-extra so the board
+// shrinks by that much instead of the page scrolling.
+const hudEl = document.querySelector(".hud");
+let hudExtra = 0;
+function syncHudExtra() {
+  const one = parseFloat(getComputedStyle(hudEl).lineHeight) || 0;
+  const h = hudEl.getBoundingClientRect().height;
+  const extra = one > 0 && h > one * 1.5 ? Math.ceil(h - one) : 0;
+  if (extra === hudExtra) return;
+  hudExtra = extra;
+  document.documentElement.style.setProperty("--hud-extra", extra + "px");
+  resizeCanvas();
+}
+if (hudEl && typeof ResizeObserver === "function") new ResizeObserver(syncHudExtra).observe(hudEl);
+
 const TOKEN = {
   bgBoard: "#fff4dc",
   gridLine: "rgba(120, 90, 60, 0.06)",

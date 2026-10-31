@@ -37,9 +37,12 @@
      scrolls. "chrome" = everything stacked above/below the board (container padding,
      title, HUD, hint, version and the gaps between them), measured and rounded up. */
   --board-cap: 560px;
-  --page-chrome-v: 224px;
+  --page-chrome-v: calc(224px + var(--hud-extra));
   /* portrait: same, plus the mobile controls row */
-  --portrait-chrome-v: calc(var(--mobile-controls-reserve) + 144px);
+  --portrait-chrome-v: calc(var(--mobile-controls-reserve) + 144px + var(--hud-extra));
+  /* v0.6.5 (#40) — the chrome heights above assume a one-line HUD. game.js sets this to
+     the extra height when a narrow screen wraps the HUD onto a second line. */
+  --hud-extra: 0px;
   /* touch landscape: horizontal room kept free for the side buttons */
   --side-reserve: calc(var(--mobile-rotate-btn-size) + 2 * var(--mobile-controls-padding));
 
@@ -117,12 +120,30 @@ h1 {
 
 .hud {
   display: flex;
-  gap: 32px;
+  flex-wrap: wrap; /* v0.6.5 (#40) — if it must wrap, move whole "label: value" pairs */
+  justify-content: center;
+  gap: 0 32px;
   font-size: 16px;
   color: var(--text-muted);
 }
 
+.hud span { white-space: nowrap; }
+
 .hud strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+
+/* v0.6.5 (#40) — on narrow phones the HUD wrapped onto two lines (320px at the start,
+   360–375px once a stage name or bigger scores show), which the fixed chrome heights
+   don't count, so the page scrolled by 16px. Tighter gaps and side padding keep it on one
+   line in most cases; when it still wraps, --hud-extra shrinks the board instead.
+   Vertical spacing and the board size are unchanged while the HUD fits on one line. */
+@media (max-width: 419px) {
+  .container { padding-left: 12px; padding-right: 12px; }
+  .hud { column-gap: 16px; }
+}
+
+@media (max-width: 359px) {
+  .hud { column-gap: 12px; }
+}
 
 canvas {
   background: var(--bg-board);
@@ -330,7 +351,7 @@ canvas {
    stack around the board so it can stay large without the page scrolling. */
 @media (min-aspect-ratio: 1001/1000) and (max-height: 520px) {
   :root {
-    --page-chrome-v: 132px;
+    --page-chrome-v: calc(132px + var(--hud-extra));
   }
 
   .container {
@@ -351,7 +372,7 @@ canvas {
    edges instead: rotate left/right at the bottom corners, start/pause top right. */
 @media (min-aspect-ratio: 1001/1000) and (pointer: coarse) {
   :root {
-    --page-chrome-v: 176px; /* no hint line */
+    --page-chrome-v: calc(176px + var(--hud-extra)); /* no hint line */
   }
 
   canvas {
@@ -393,7 +414,7 @@ canvas {
 
 @media (min-aspect-ratio: 1001/1000) and (max-height: 520px) and (pointer: coarse) {
   :root {
-    --page-chrome-v: 108px;
+    --page-chrome-v: calc(108px + var(--hud-extra));
   }
 }
 
