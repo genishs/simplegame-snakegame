@@ -40,8 +40,7 @@
   --page-chrome-v: calc(224px + var(--hud-extra));
   /* portrait: same, plus the mobile controls row */
   --portrait-chrome-v: calc(var(--mobile-controls-reserve) + 144px + var(--hud-extra));
-  /* v0.6.5 (#40) — the chrome heights above assume a one-line HUD. game.js sets this to
-     the extra height when a narrow screen wraps the HUD onto a second line. */
+  /* v0.6.5 (#40) — set by game.js when the HUD wraps to a second line */
   --hud-extra: 0px;
   /* touch landscape: horizontal room kept free for the side buttons */
   --side-reserve: calc(var(--mobile-rotate-btn-size) + 2 * var(--mobile-controls-padding));
@@ -120,7 +119,7 @@ h1 {
 
 .hud {
   display: flex;
-  flex-wrap: wrap; /* v0.6.5 (#40) — if it must wrap, move whole "label: value" pairs */
+  flex-wrap: wrap; /* v0.6.5 (#40) — wrap whole pairs */
   justify-content: center;
   gap: 0 32px;
   font-size: 16px;
@@ -131,11 +130,8 @@ h1 {
 
 .hud strong { color: var(--text-strong); font-variant-numeric: tabular-nums; }
 
-/* v0.6.5 (#40) — on narrow phones the HUD wrapped onto two lines (320px at the start,
-   360–375px once a stage name or bigger scores show), which the fixed chrome heights
-   don't count, so the page scrolled by 16px. Tighter gaps and side padding keep it on one
-   line in most cases; when it still wraps, --hud-extra shrinks the board instead.
-   Vertical spacing and the board size are unchanged while the HUD fits on one line. */
+/* v0.6.5 (#40) — keep the HUD on one line on narrow phones (a wrapped HUD scrolled
+   the page 16px); if it still wraps, --hud-extra shrinks the board. */
 @media (max-width: 419px) {
   .container { padding-left: 12px; padding-right: 12px; }
   .hud { column-gap: 16px; }

@@ -57,9 +57,8 @@ function resizeCanvas() {
 
 window.addEventListener("resize", resizeCanvas);
 
-// v0.6.5 (#40) — the CSS board size assumes a one-line HUD. When a narrow screen wraps
-// it (long stage name, big scores), report the extra height as --hud-extra so the board
-// shrinks by that much instead of the page scrolling.
+// v0.6.5 (#40) — CSS sizes the board for a one-line HUD; if it wraps, pass the extra
+// height as --hud-extra so the board shrinks instead of the page scrolling.
 const hudEl = document.querySelector(".hud");
 let hudExtra = 0;
 function syncHudExtra() {
@@ -245,9 +244,8 @@ function init() {
   stageIndex = 0;
   score = 0;
   best = Number(localStorage.getItem("snake-best") || 0);
-  // v0.6.5 (#35) — the Android shell keeps its own copy of the best score (written at
-  // once on game over); WebView localStorage can lose a write if the app is killed
-  // right after. Use whichever is higher. Absent in browsers.
+  // v0.6.5 (#35) — the Android shell's copy survives a kill right after game over
+  // (WebView localStorage writes lazily); take the higher.
   try {
     if (typeof Android !== "undefined" && Android.getBest) best = Math.max(best, Number(Android.getBest()) || 0);
   } catch (_) {}
@@ -424,7 +422,7 @@ function gameOver() {
   bulges.length = 0;
   if (score > best) {
     best = score;
-    // v0.6.5 (#35) — shell copy first: SharedPreferences commit() is on disk on return.
+    // v0.6.5 (#35) — shell first: it is on disk when the call returns.
     try {
       if (typeof Android !== "undefined" && Android.saveBest) Android.saveBest(best);
     } catch (_) {}
@@ -666,7 +664,7 @@ let pathOff = 0;    // u of snake[0] at this frame (index space → path space)
 let antX = 1, antY = 0, bendX = -1, bendY = -1, bendP0 = 0, bendSpan = 1;
 let pathTicks = 0, pathPrev = null;
 const PP = { x: 0, y: 0, tx: 1, ty: 0 }; // pathPt() result, pixels + unit tangent
-let pathOX = 0, pathOY = 0; // v0.6.5 (#47) — board offset, set once per frame in buildPath
+let pathOX = 0, pathOY = 0; // v0.6.5 (#47) — board offset, once per frame
 
 function buildPath() {
   const n = snake.length;
@@ -850,9 +848,8 @@ function bulgeU(progress) {
 // up) — one bulging tube that follows corners. The fruit shows through as a bulgeFill
 // ellipse. Along the way (frac 0→1) the swell flattens and the fruit shrinks and fades;
 // at the tail both settle out over bulgeFadeMs. Wiggle (v0.5.9 tokens) sways the lump.
-// v0.6.5 (#47) — the circles are computed once per frame into reused buffers (both
-// passes draw the same ones), and lumps get fewer of them when many share the body:
-// 13 for 1–2 lumps, 9 for 3–4, 7 for 5+ (same cos² profile, coarser sampling).
+// v0.6.5 (#47) — circles computed once per frame for both passes; 13 per lump for 1–2
+// lumps, 9 for 3–4, 7 for 5+ (same cos² profile, coarser).
 const BS = { u: 0, swell: 0, size: 1, alpha: 1, wig: 0 };
 const swX = new Float64Array(BULGE_MAX * 13);
 const swY = new Float64Array(BULGE_MAX * 13);
@@ -871,7 +868,7 @@ function bulgeShape(b, i, now) {
     * cellSize * T.wiggleAmpFactor * BS.size;
 }
 
-// Every bulge's swell circles for this frame → swX/swY (center) + swS (extra radius).
+// This frame's swell circles → swX/swY (center), swS (extra radius).
 function prepareSwell(now) {
   const L = TOKEN.bulgeSwellHalfLen;
   const nb = bulges.length;
@@ -892,7 +889,7 @@ function prepareSwell(now) {
   }
 }
 
-// Add the prepared swell circles (base radius `half`) to a fresh canvas path.
+// The prepared circles (base radius `half`) as a fresh canvas path.
 function swellPath(half) {
   ctx.beginPath();
   for (let k = 0; k < swN; k++) {
