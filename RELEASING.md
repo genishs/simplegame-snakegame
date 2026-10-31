@@ -65,4 +65,4 @@
 - **웹과 안드로이드를 구분합니다.** 웹 게임(GitHub Pages)은 `main`에 병합되면 바로 배포되므로 출시 라인 브랜치가 없고, 태그는 `v0.X.Y`입니다. 안드로이드는 `release/android/<major>.<minor>` 브랜치와 `android/v...` 태그를 씁니다.
 - `main`은 보호 브랜치입니다. 모든 변경은 PR로 합칩니다(`docs/WORKFLOW.md`).
 - 웹 3파일(`index.html`·`game.js`·`style.css`)이 단일 원천입니다. 빌드 때 Gradle이 `assets`로 복사하며, `android/` 아래에는 사본을 두지 않습니다.
-- 데이터 흐름: 권한은 `VIBRATE` 하나뿐이고 `INTERNET`은 없습니다. 최고 점수는 기기의 `localStorage`에만 저장합니다. 데이터 보안 선언은 수집 없음입니다. 권한이나 통신을 추가하면 선언과 방침 문구부터 다시 맞춥니다.
+- 데이터 흐름: 권한은 `VIBRATE` 하나뿐이고 `INTERNET`은 없습니다. 최고 점수는 기기 안에만 저장합니다(웹은 `localStorage`, 앱은 `localStorage`와 셸의 `SharedPreferences` 두 곳 — #35, 강제 종료 때 유실 방지). 데이터 보안 선언은 수집 없음입니다. 권한이나 통신을 추가하면 선언과 방침 문구부터 다시 맞춥니다.
