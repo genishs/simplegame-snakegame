@@ -1,7 +1,7 @@
 // Single source of truth for the version (issue #26). The page's version label is
 // filled from this, and android/app/build.gradle.kts parses this exact line to
 // derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
-const GAME_VERSION = '0.6.5';
+const GAME_VERSION = '0.7.0';
 
 const versionEl = document.getElementById("version");
 if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
@@ -157,28 +157,21 @@ const TOKEN = {
 
 // v0.6.0 — spawnCount: 동시 스폰 과일 수, fruitMoves: 머리로 드리프트하는 이동 과일.
 // 미정의 필드는 코드에서 기본값(spawnCount=1, fruitMoves=false)으로 폴백한다(Decision G).
-// v0.7.0 (#50) — 속도는 스테이지마다 STAGE_TICK_STEP(1%)씩만 빨라진다:
-// tick = round(STAGE_TICK_BASE × STAGE_TICK_STEP^(n−1)). 1~10은 필요 과일 수가 늘고,
-// 11~13은 fillBoard — 뱀이 판의 모든 칸을 채우면 클리어(판은 짝수 칸 6×6·8×8·10×10).
-// 13을 채우면 모든 스테이지 클리어. #30: St3 이동 과일 끔, 7~10에서 켬.
+// v0.7.0 (#50) — tick = round(STAGE_TICK_BASE × STAGE_TICK_STEP^(n−1)): 1% faster per
+// stage. 1–10 clear on apples (5→20); 11–13 (fillBoard, even boards) clear when the snake
+// fills every cell, and 13 ends the run. #30: St3 fruit stays still, 7–10 move.
 const STAGE_TICK_BASE = 220;
 const STAGE_TICK_STEP = 0.99;
 function stageTick(n) { return Math.round(STAGE_TICK_BASE * Math.pow(STAGE_TICK_STEP, n - 1)); }
+// st(n, board size, apples to clear | null = fill the board, fruits at once, fruit moves)
+const st = (n, k, apples, spawnCount, fruitMoves) => ({ id: n, label: "스테이지 " + n, cols: k, rows: k,
+  tick: stageTick(n), snakeLen: 3, clearAfterApples: apples, fillBoard: apples == null, spawnCount, fruitMoves, noFailOnHit: false });
 const STAGES = [
-  { id: "tutorial", label: "튜토리얼", cols: 5,  rows: 5,  tick: 420, snakeLen: 2, clearAfterApples: 3,    spawnCount: 1, fruitMoves: false, noFailOnHit: true  },
-  { id: 1,  label: "스테이지 1",  cols: 20, rows: 20, tick: stageTick(1),  snakeLen: 3, clearAfterApples: 5,    spawnCount: 1, fruitMoves: false, noFailOnHit: false },
-  { id: 2,  label: "스테이지 2",  cols: 20, rows: 20, tick: stageTick(2),  snakeLen: 3, clearAfterApples: 6,    spawnCount: 1, fruitMoves: false, noFailOnHit: false },
-  { id: 3,  label: "스테이지 3",  cols: 20, rows: 20, tick: stageTick(3),  snakeLen: 3, clearAfterApples: 7,    spawnCount: 1, fruitMoves: false, noFailOnHit: false },
-  { id: 4,  label: "스테이지 4",  cols: 20, rows: 20, tick: stageTick(4),  snakeLen: 3, clearAfterApples: 8,    spawnCount: 3, fruitMoves: false, noFailOnHit: false },
-  { id: 5,  label: "스테이지 5",  cols: 20, rows: 20, tick: stageTick(5),  snakeLen: 3, clearAfterApples: 10,   spawnCount: 3, fruitMoves: false, noFailOnHit: false },
-  { id: 6,  label: "스테이지 6",  cols: 20, rows: 20, tick: stageTick(6),  snakeLen: 3, clearAfterApples: 12,   spawnCount: 5, fruitMoves: false, noFailOnHit: false },
-  { id: 7,  label: "스테이지 7",  cols: 20, rows: 20, tick: stageTick(7),  snakeLen: 3, clearAfterApples: 14,   spawnCount: 5, fruitMoves: true,  noFailOnHit: false },
-  { id: 8,  label: "스테이지 8",  cols: 20, rows: 20, tick: stageTick(8),  snakeLen: 3, clearAfterApples: 16,   spawnCount: 5, fruitMoves: true,  noFailOnHit: false },
-  { id: 9,  label: "스테이지 9",  cols: 20, rows: 20, tick: stageTick(9),  snakeLen: 3, clearAfterApples: 18,   spawnCount: 8, fruitMoves: true,  noFailOnHit: false },
-  { id: 10, label: "스테이지 10", cols: 20, rows: 20, tick: stageTick(10), snakeLen: 3, clearAfterApples: 20,   spawnCount: 8, fruitMoves: true,  noFailOnHit: false },
-  { id: 11, label: "스테이지 11", cols: 6,  rows: 6,  tick: stageTick(11), snakeLen: 3, clearAfterApples: null, fillBoard: true, spawnCount: 1, fruitMoves: false, noFailOnHit: false },
-  { id: 12, label: "스테이지 12", cols: 8,  rows: 8,  tick: stageTick(12), snakeLen: 3, clearAfterApples: null, fillBoard: true, spawnCount: 1, fruitMoves: false, noFailOnHit: false },
-  { id: 13, label: "스테이지 13", cols: 10, rows: 10, tick: stageTick(13), snakeLen: 3, clearAfterApples: null, fillBoard: true, spawnCount: 1, fruitMoves: false, noFailOnHit: false },
+  { id: "tutorial", label: "튜토리얼", cols: 5, rows: 5, tick: 420, snakeLen: 2, clearAfterApples: 3, spawnCount: 1, fruitMoves: false, noFailOnHit: true },
+  st(1, 20, 5, 1, false), st(2, 20, 6, 1, false), st(3, 20, 7, 1, false), st(4, 20, 8, 3, false),
+  st(5, 20, 10, 3, false), st(6, 20, 12, 5, false), st(7, 20, 14, 5, true), st(8, 20, 16, 5, true),
+  st(9, 20, 18, 8, true), st(10, 20, 20, 8, true),
+  st(11, 6, null, 1, false), st(12, 8, null, 1, false), st(13, 10, null, 1, false),
 ];
 // 시작 메뉴 선택지 → STAGES 인덱스 (튜토리얼 / 바로 시작 / 11 스테이지부터)
 const CHOICE_STAGES = [0, 1, 11];
