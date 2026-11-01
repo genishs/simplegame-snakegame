@@ -11,6 +11,9 @@ const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
 const bestEl = document.getElementById("best");
 const stageEl = document.getElementById("stage");
+// v0.7.0 (#50) — "남은 칸" HUD item, shown only on fillBoard stages
+const cellsWrapEl = document.getElementById("cells-wrap");
+const cellsLeftEl = document.getElementById("cells-left");
 const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlay-title");
 const overlayMsg = document.getElementById("overlay-msg");
@@ -24,6 +27,8 @@ const btnAux      = document.getElementById("btn-aux");
 const choiceButtonsEl  = document.getElementById("choice-buttons");
 const btnChoiceTutorial = document.getElementById("btn-choice-tutorial");
 const btnChoiceSkip    = document.getElementById("btn-choice-skip");
+const btnChoiceFill    = document.getElementById("btn-choice-fill"); // v0.7.0 (#50)
+const choiceBtns = [btnChoiceTutorial, btnChoiceSkip, btnChoiceFill];
 
 // v0.5.7 — help modal DOM references
 const helpModal    = document.getElementById("help-modal");
@@ -152,17 +157,31 @@ const TOKEN = {
 
 // v0.6.0 — spawnCount: 동시 스폰 과일 수, fruitMoves: 머리로 드리프트하는 이동 과일.
 // 미정의 필드는 코드에서 기본값(spawnCount=1, fruitMoves=false)으로 폴백한다(Decision G).
-// St3 fruitMoves=true는 라이브 검증용 잠정 플래그(Decision D), St7이 정식 엔드리스+이동.
+// v0.7.0 (#50) — 속도는 스테이지마다 STAGE_TICK_STEP(1%)씩만 빨라진다:
+// tick = round(STAGE_TICK_BASE × STAGE_TICK_STEP^(n−1)). 1~10은 필요 과일 수가 늘고,
+// 11~13은 fillBoard — 뱀이 판의 모든 칸을 채우면 클리어(판은 짝수 칸 6×6·8×8·10×10).
+// 13을 채우면 모든 스테이지 클리어. #30: St3 이동 과일 끔, 7~10에서 켬.
+const STAGE_TICK_BASE = 220;
+const STAGE_TICK_STEP = 0.99;
+function stageTick(n) { return Math.round(STAGE_TICK_BASE * Math.pow(STAGE_TICK_STEP, n - 1)); }
 const STAGES = [
-  { id: "tutorial", label: "튜토리얼", cols: 5,  rows: 5,  tick: 420, snakeLen: 2, clearAfterApples: 3,    spawnCount: 1,  fruitMoves: false, noFailOnHit: true  },
-  { id: 1,          label: "스테이지 1",  cols: 20, rows: 20, tick: 220, snakeLen: 3, clearAfterApples: 5,    spawnCount: 1,  fruitMoves: false, noFailOnHit: false },
-  { id: 2,          label: "스테이지 2",  cols: 20, rows: 20, tick: 180, snakeLen: 3, clearAfterApples: 5,    spawnCount: 1,  fruitMoves: false, noFailOnHit: false },
-  { id: 3,          label: "스테이지 3",  cols: 20, rows: 20, tick: 150, snakeLen: 3, clearAfterApples: 5,    spawnCount: 1,  fruitMoves: true,  noFailOnHit: false },
-  { id: 4,          label: "스테이지 4",  cols: 20, rows: 20, tick: 140, snakeLen: 3, clearAfterApples: 6,    spawnCount: 5,  fruitMoves: false, noFailOnHit: false },
-  { id: 5,          label: "스테이지 5",  cols: 20, rows: 20, tick: 130, snakeLen: 3, clearAfterApples: 8,    spawnCount: 10, fruitMoves: false, noFailOnHit: false },
-  { id: 6,          label: "스테이지 6",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: 10,   spawnCount: 10, fruitMoves: false, noFailOnHit: false },
-  { id: 7,          label: "스테이지 7",  cols: 20, rows: 20, tick: 120, snakeLen: 3, clearAfterApples: null, spawnCount: 10, fruitMoves: true,  noFailOnHit: false },
+  { id: "tutorial", label: "튜토리얼", cols: 5,  rows: 5,  tick: 420, snakeLen: 2, clearAfterApples: 3,    spawnCount: 1, fruitMoves: false, noFailOnHit: true  },
+  { id: 1,  label: "스테이지 1",  cols: 20, rows: 20, tick: stageTick(1),  snakeLen: 3, clearAfterApples: 5,    spawnCount: 1, fruitMoves: false, noFailOnHit: false },
+  { id: 2,  label: "스테이지 2",  cols: 20, rows: 20, tick: stageTick(2),  snakeLen: 3, clearAfterApples: 6,    spawnCount: 1, fruitMoves: false, noFailOnHit: false },
+  { id: 3,  label: "스테이지 3",  cols: 20, rows: 20, tick: stageTick(3),  snakeLen: 3, clearAfterApples: 7,    spawnCount: 1, fruitMoves: false, noFailOnHit: false },
+  { id: 4,  label: "스테이지 4",  cols: 20, rows: 20, tick: stageTick(4),  snakeLen: 3, clearAfterApples: 8,    spawnCount: 3, fruitMoves: false, noFailOnHit: false },
+  { id: 5,  label: "스테이지 5",  cols: 20, rows: 20, tick: stageTick(5),  snakeLen: 3, clearAfterApples: 10,   spawnCount: 3, fruitMoves: false, noFailOnHit: false },
+  { id: 6,  label: "스테이지 6",  cols: 20, rows: 20, tick: stageTick(6),  snakeLen: 3, clearAfterApples: 12,   spawnCount: 5, fruitMoves: false, noFailOnHit: false },
+  { id: 7,  label: "스테이지 7",  cols: 20, rows: 20, tick: stageTick(7),  snakeLen: 3, clearAfterApples: 14,   spawnCount: 5, fruitMoves: true,  noFailOnHit: false },
+  { id: 8,  label: "스테이지 8",  cols: 20, rows: 20, tick: stageTick(8),  snakeLen: 3, clearAfterApples: 16,   spawnCount: 5, fruitMoves: true,  noFailOnHit: false },
+  { id: 9,  label: "스테이지 9",  cols: 20, rows: 20, tick: stageTick(9),  snakeLen: 3, clearAfterApples: 18,   spawnCount: 8, fruitMoves: true,  noFailOnHit: false },
+  { id: 10, label: "스테이지 10", cols: 20, rows: 20, tick: stageTick(10), snakeLen: 3, clearAfterApples: 20,   spawnCount: 8, fruitMoves: true,  noFailOnHit: false },
+  { id: 11, label: "스테이지 11", cols: 6,  rows: 6,  tick: stageTick(11), snakeLen: 3, clearAfterApples: null, fillBoard: true, spawnCount: 1, fruitMoves: false, noFailOnHit: false },
+  { id: 12, label: "스테이지 12", cols: 8,  rows: 8,  tick: stageTick(12), snakeLen: 3, clearAfterApples: null, fillBoard: true, spawnCount: 1, fruitMoves: false, noFailOnHit: false },
+  { id: 13, label: "스테이지 13", cols: 10, rows: 10, tick: stageTick(13), snakeLen: 3, clearAfterApples: null, fillBoard: true, spawnCount: 1, fruitMoves: false, noFailOnHit: false },
 ];
+// 시작 메뉴 선택지 → STAGES 인덱스 (튜토리얼 / 바로 시작 / 11 스테이지부터)
+const CHOICE_STAGES = [0, 1, 11];
 
 // TODO 1 — STATE 2개 추가 + v0.5.7 HELP
 const STATE = {
@@ -350,6 +369,8 @@ function updateHud() {
   scoreEl.textContent = score;
   bestEl.textContent = best;
   stageEl.textContent = stage.label;
+  cellsWrapEl.hidden = !stage.fillBoard;
+  if (stage.fillBoard) cellsLeftEl.textContent = stage.cols * stage.rows - snake.length;
 }
 
 // v0.6.2 (#25) — touch-first devices (phones, tablets, the Android app) get touch
@@ -415,9 +436,10 @@ function syncHostKeepAwake() {
   if (typeof Android !== "undefined" && Android.setKeepScreenOn) Android.setKeepScreenOn(want);
 }
 
-function gameOver() {
+// allCleared (v0.7.0 #50): the last stage was filled — same end of run, no fail buzz.
+function gameOver(allCleared) {
   // v0.6.1 — Android shell haptic bridge (no-op in a plain browser).
-  if (typeof Android !== "undefined" && Android.vibrate) Android.vibrate(100);
+  if (!allCleared && typeof Android !== "undefined" && Android.vibrate) Android.vibrate(100);
   state = STATE.OVER;
   bulges.length = 0;
   if (score > best) {
@@ -429,11 +451,15 @@ function gameOver() {
     localStorage.setItem("snake-best", String(best));
     updateHud();
   }
-  showOverlay("게임 끝", `점수: ${score} · ${uiText("스페이스바로 다시 시작", "탭해서 다시 시작")}`);
+  showOverlay(allCleared ? "모든 스테이지 클리어!" : "게임 끝",
+    `점수: ${score} · ${uiText("스페이스바로 다시 시작", "탭해서 다시 시작")}`);
   updateAuxButton();
 }
 
 function enterStageClear() {
+  // v0.7.0 (#50) — clearing the last stage ends the run like a game over (best is
+  // recorded, restart goes to the start menu), with its own overlay.
+  if (stageIndex >= STAGES.length - 1) return gameOver(true);
   state = STATE.STAGE_CLEAR;
   stageClearAt = performance.now();
   const next = STAGES[stageIndex + 1];
@@ -511,18 +537,12 @@ function closeHelp() {
 }
 
 function updateChoiceHighlight() {
-  if (choiceHighlight === 0) {
-    btnChoiceTutorial.classList.add("is-highlighted");
-    btnChoiceSkip.classList.remove("is-highlighted");
-  } else {
-    btnChoiceTutorial.classList.remove("is-highlighted");
-    btnChoiceSkip.classList.add("is-highlighted");
-  }
+  choiceBtns.forEach((b, i) => b.classList.toggle("is-highlighted", i === choiceHighlight));
 }
 
 function confirmChoice(idx) {
   choiceButtonsEl.classList.add("hidden");
-  pendingStageIdx = idx;
+  pendingStageIdx = CHOICE_STAGES[idx]; // v0.7.0 — choice 2 = stage 11
   enterCountdown();
 }
 
@@ -596,7 +616,9 @@ function tick() {
     spawnBulge();
     // Clear judged on cumulative applesEaten (Set D). On clear, skip respawn — the
     // stage transitions immediately so a fresh fruit would be a ghost (planner risk #3).
-    if (stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
+    // v0.7.0 (#50) — fillBoard stages clear when the snake covers every cell.
+    if (stage.fillBoard ? snake.length >= stage.cols * stage.rows
+      : stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
       return enterStageClear();
     }
     // respawn: keep the board at spawnCount fruits (safe no-op if board is full).
@@ -1411,8 +1433,10 @@ document.addEventListener("keydown", (e) => {
   if (state === STATE.CHOICE) {
     if (key === "1") { confirmChoice(0); e.preventDefault(); return; }
     if (key === "2") { confirmChoice(1); e.preventDefault(); return; }
-    if (key === "ArrowLeft" || key === "a" || key === "A") { choiceHighlight = 0; updateChoiceHighlight(); e.preventDefault(); return; }
-    if (key === "ArrowRight" || key === "d" || key === "D") { choiceHighlight = 1; updateChoiceHighlight(); e.preventDefault(); return; }
+    if (key === "3") { confirmChoice(2); e.preventDefault(); return; }
+    // v0.7.0 — three choices: ← → step through them (clamped at the ends)
+    if (key === "ArrowLeft" || key === "a" || key === "A") { choiceHighlight = Math.max(0, choiceHighlight - 1); updateChoiceHighlight(); e.preventDefault(); return; }
+    if (key === "ArrowRight" || key === "d" || key === "D") { choiceHighlight = Math.min(choiceBtns.length - 1, choiceHighlight + 1); updateChoiceHighlight(); e.preventDefault(); return; }
     if (key === " " || key === "Spacebar") { confirmChoice(choiceHighlight); e.preventDefault(); return; }
     return;
   }
@@ -1472,6 +1496,7 @@ if (btnAux) {
 // TODO 10 — choice button wiring
 btnChoiceTutorial.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(0); });
 btnChoiceSkip.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(1); });
+btnChoiceFill.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(2); });
 
 // v0.5.7 — help modal wiring
 if (btnHelpClose) {
