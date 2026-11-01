@@ -255,7 +255,7 @@ function snapshotSnake() {
 function init() {
   stageIndex = 0;
   score = 0;
-  best = Number(localStorage.getItem("snake-best") || 0);
+  best = Number(localStorage.getItem("snake-best")) || 0;
   // v0.6.5 (#35) — the Android shell's copy survives a kill right after game over
   // (WebView localStorage writes lazily); take the higher.
   try {

@@ -211,17 +211,19 @@ class HostBridge(private val activity: Activity) {
 
     @JavascriptInterface
     fun saveBest(score: Int) {
+        if (score !in 1..MAX_BEST) return // #49: a JS 1e12 arrives as Int.MAX_VALUE and would pin the best score
         synchronized(this) {
             if (score > prefs.getInt(KEY_BEST, 0)) prefs.edit().putInt(KEY_BEST, score).commit()
         }
     }
 
     @JavascriptInterface
-    fun getBest(): Int = prefs.getInt(KEY_BEST, 0)
+    fun getBest(): Int = prefs.getInt(KEY_BEST, 0).coerceIn(0, MAX_BEST)
 
     private companion object {
         const val MAX_VIBRATE_MS = 200L
         const val PREFS_NAME = "snakegame"
         const val KEY_BEST = "best"
+        const val MAX_BEST = 1_000_000 // far above any reachable score (10 points per apple)
     }
 }
