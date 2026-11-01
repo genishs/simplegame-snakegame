@@ -1,7 +1,7 @@
 // Single source of truth for the version (issue #26). The page's version label is
 // filled from this, and android/app/build.gradle.kts parses this exact line to
 // derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
-const GAME_VERSION = '0.7.0';
+const GAME_VERSION = '0.6.6';
 
 const versionEl = document.getElementById("version");
 if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
@@ -11,7 +11,7 @@ const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
 const bestEl = document.getElementById("best");
 const stageEl = document.getElementById("stage");
-// v0.7.0 (#50) — "남은 칸" HUD item, shown only on fillBoard stages
+// v0.6.6 (#50) — "남은 칸" HUD item, shown only on fillBoard stages
 const cellsWrapEl = document.getElementById("cells-wrap");
 const cellsLeftEl = document.getElementById("cells-left");
 const overlay = document.getElementById("overlay");
@@ -27,7 +27,7 @@ const btnAux      = document.getElementById("btn-aux");
 const choiceButtonsEl  = document.getElementById("choice-buttons");
 const btnChoiceTutorial = document.getElementById("btn-choice-tutorial");
 const btnChoiceSkip    = document.getElementById("btn-choice-skip");
-const btnChoiceFill    = document.getElementById("btn-choice-fill"); // v0.7.0 (#50)
+const btnChoiceFill    = document.getElementById("btn-choice-fill"); // v0.6.6 (#50)
 const choiceBtns = [btnChoiceTutorial, btnChoiceSkip, btnChoiceFill];
 
 // v0.5.7 — help modal DOM references
@@ -157,7 +157,7 @@ const TOKEN = {
 
 // v0.6.0 — spawnCount: 동시 스폰 과일 수, fruitMoves: 머리로 드리프트하는 이동 과일.
 // 미정의 필드는 코드에서 기본값(spawnCount=1, fruitMoves=false)으로 폴백한다(Decision G).
-// v0.7.0 (#50) — tick = round(STAGE_TICK_BASE × STAGE_TICK_STEP^(n−1)): 1% faster per
+// v0.6.6 (#50) — tick = round(STAGE_TICK_BASE × STAGE_TICK_STEP^(n−1)): 1% faster per
 // stage. 1–10 clear on apples (5→20); 11–13 (fillBoard, even boards) clear when the snake
 // fills every cell, and 13 ends the run. #30: St3 fruit stays still, 7–10 move.
 const STAGE_TICK_BASE = 220;
@@ -425,7 +425,7 @@ function syncHostKeepAwake() {
   if (typeof Android !== "undefined" && Android.setKeepScreenOn) Android.setKeepScreenOn(want);
 }
 
-// allCleared (v0.7.0 #50): the last stage was filled — same end of run, no fail buzz.
+// allCleared (v0.6.6 #50): the last stage was filled — same end of run, no fail buzz.
 function gameOver(allCleared) {
   // v0.6.1 — Android shell haptic bridge (no-op in a plain browser).
   if (!allCleared && typeof Android !== "undefined" && Android.vibrate) Android.vibrate(100);
@@ -446,7 +446,7 @@ function gameOver(allCleared) {
 }
 
 function enterStageClear() {
-  // v0.7.0 (#50) — clearing the last stage ends the run like a game over (best is
+  // v0.6.6 (#50) — clearing the last stage ends the run like a game over (best is
   // recorded, restart goes to the start menu), with its own overlay.
   if (stageIndex >= STAGES.length - 1) return gameOver(true);
   state = STATE.STAGE_CLEAR;
@@ -531,7 +531,7 @@ function updateChoiceHighlight() {
 
 function confirmChoice(idx) {
   choiceButtonsEl.classList.add("hidden");
-  pendingStageIdx = CHOICE_STAGES[idx]; // v0.7.0 — choice 2 = stage 11
+  pendingStageIdx = CHOICE_STAGES[idx]; // v0.6.6 — choice 2 = stage 11
   enterCountdown();
 }
 
@@ -1376,7 +1376,7 @@ document.addEventListener("keydown", (e) => {
     if (key === "1") { confirmChoice(0); e.preventDefault(); return; }
     if (key === "2") { confirmChoice(1); e.preventDefault(); return; }
     if (key === "3") { confirmChoice(2); e.preventDefault(); return; }
-    // v0.7.0 — three choices: ← → step through them (clamped at the ends)
+    // v0.6.6 — three choices: ← → step through them (clamped at the ends)
     if (key === "ArrowLeft" || key === "a" || key === "A") { choiceHighlight = Math.max(0, choiceHighlight - 1); updateChoiceHighlight(); e.preventDefault(); return; }
     if (key === "ArrowRight" || key === "d" || key === "D") { choiceHighlight = Math.min(choiceBtns.length - 1, choiceHighlight + 1); updateChoiceHighlight(); e.preventDefault(); return; }
     if (key === " " || key === "Spacebar") { confirmChoice(choiceHighlight); e.preventDefault(); return; }
