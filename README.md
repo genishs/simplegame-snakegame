@@ -38,7 +38,7 @@ Open the live site and press **Space** to start.
 | ← → / A D | Turn left / Turn right |
 | Space | Start / Pause / Restart |
 | Esc | Skip tutorial (only on the tutorial stage) |
-| 1 / 2 | 시작 화면에서 튜토리얼 / 바로 시작 선택 |
+| 1 / 2 / 3 | 시작 화면에서 튜토리얼 / 바로 시작 / 11 스테이지부터 시작 선택 |
 
 Your best score is stored in `localStorage` under the key `snake-best`.
 
@@ -110,7 +110,7 @@ Versions advance one slice at a time. The number lives in one place, `const GAME
 | v0.6.3 | 웹 페이지 제목을 스토어·런처 이름 「심플 스네이크」로 통일 (웹은 바로, 안드로이드는 다음 출시 — versionCode 60301) | ✅ |
 | v0.6.4 | 둥근 몸 곡선 + 경로를 따라 미끄러지는 이동 + 볼록하게 부풀었다 흐려지는 소화 (웹은 바로, 안드로이드는 다음 출시 — versionCode 60401) | ✅ |
 | v0.6.5 | 소화 덩어리 그리기 비용 줄이기, 좁은 세로 화면 넘침 수정, 앱 최고점 즉시 저장 (웹은 바로, 안드로이드는 다음 출시 — versionCode 60501) | ✅ |
-| v0.6+ | Full-board clear mechanic (보류 — 향후) | — |
+| v0.7.0 | 스테이지 곡선 재설계 — 속도 1%씩, 1~10 과일 수 증가, 11~13 판 채우기 + 모든 스테이지 클리어, 「11 스테이지부터 시작」 (웹은 바로, 안드로이드는 다음 출시 — versionCode 70001) | ✅ |
 | v1.0 | Cozy graphic identity complete | reserved |
 
 See `HISTORY.md` for the full ledger.
