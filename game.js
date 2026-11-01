@@ -1,7 +1,7 @@
 // Single source of truth for the version (issue #26). The page's version label is
 // filled from this, and android/app/build.gradle.kts parses this exact line to
 // derive versionName/versionCode — keep the `const GAME_VERSION = 'X.Y.Z';` form.
-const GAME_VERSION = '0.6.6';
+const GAME_VERSION = '0.6.7';
 
 const versionEl = document.getElementById("version");
 if (versionEl) versionEl.textContent = `v${GAME_VERSION}`;
@@ -162,7 +162,9 @@ const TOKEN = {
 // fills every cell, and 13 ends the run. #30: St3 fruit stays still, 7–10 move.
 const STAGE_TICK_BASE = 220;
 const STAGE_TICK_STEP = 0.99;
-function stageTick(n) { return Math.round(STAGE_TICK_BASE * Math.pow(STAGE_TICK_STEP, n - 1)); }
+// v0.6.7 (#50) — fill-board stages 11–13 are slower than the curve (small boards felt too fast)
+const FILL_TICK = { 11: 300, 12: 270, 13: 250 };
+function stageTick(n) { return FILL_TICK[n] || Math.round(STAGE_TICK_BASE * Math.pow(STAGE_TICK_STEP, n - 1)); }
 // st(n, board size, apples to clear | null = fill the board, fruits at once, fruit moves)
 const st = (n, k, apples, spawnCount, fruitMoves) => ({ id: n, label: "스테이지 " + n, cols: k, rows: k,
   tick: stageTick(n), snakeLen: 3, clearAfterApples: apples, fillBoard: apples == null, spawnCount, fruitMoves, noFailOnHit: false });
