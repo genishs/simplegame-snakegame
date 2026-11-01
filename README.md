@@ -40,7 +40,7 @@ Open the live site and press **Space** to start.
 | Esc | Skip tutorial (only on the tutorial stage) |
 | 1 / 2 | 시작 화면에서 튜토리얼 / 바로 시작 선택 |
 
-Your best score is stored in `localStorage` under the key `snake-best`.
+Your best score is stored in `localStorage` under the key `snake-best`. The Android app also keeps a copy in its private `SharedPreferences` (so a force-stop right after game over does not lose it) and uses the higher of the two.
 
 ## Running locally
 
