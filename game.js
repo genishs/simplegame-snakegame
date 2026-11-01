@@ -18,12 +18,12 @@ const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlay-title");
 const overlayMsg = document.getElementById("overlay-msg");
 
-// TODO 7 — mobile button DOM references
+// mobile button DOM references
 const btnRotLeft  = document.getElementById("btn-rot-left");
 const btnRotRight = document.getElementById("btn-rot-right");
 const btnAux      = document.getElementById("btn-aux");
 
-// TODO 10 — choice button DOM references
+// choice button DOM references
 const choiceButtonsEl  = document.getElementById("choice-buttons");
 const btnChoiceTutorial = document.getElementById("btn-choice-tutorial");
 const btnChoiceSkip    = document.getElementById("btn-choice-skip");
@@ -141,7 +141,7 @@ const TOKEN = {
   yawnDur: 900,            // 1회 모션 지속(느린 하품)
   yawnFacingScale: 1.08,   // facing축 peak scale (미세)
   yawnPerpScale: 0.96,     // perp축 peak scale (면적 ≈ 보존)
-  // TODO 2 — v0.5.6 countdown tokens
+  // v0.5.6 countdown tokens
   countdownMaskColor: "#3b2a1a",
   countdownMaskAlpha: 0.35,
   countdownNumSize: 120,
@@ -176,7 +176,7 @@ const STAGES = [
 // 시작 메뉴 선택지 → STAGES 인덱스 (튜토리얼 / 바로 시작 / 11 스테이지부터)
 const CHOICE_STAGES = [0, 1, 11];
 
-// TODO 1 — STATE 2개 추가 + v0.5.7 HELP
+// STATE 2개 추가 + v0.5.7 HELP
 const STATE = {
   READY: "ready",
   PLAYING: "playing",
@@ -195,7 +195,7 @@ const STAGE_CLEAR_HOLD_MS = 800;
 const bulges = [];
 const BULGE_MAX = 8;
 
-// TODO 5 — touch zone hint module-scope state
+// touch zone hint module-scope state
 let hintDismissed = false;
 let hintReadyAt = 0;
 let hintFadeOutStart = 0;
@@ -204,11 +204,11 @@ const HINT_FADE_IN_MS = 400;
 const HINT_FADE_OUT_MS = 200;
 const HINT_PEAK_ALPHA = 0.08;
 
-// TODO 7 — SVG constants for aux button
+// SVG constants for aux button
 const SVG_PLAY = `<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="8 5 19 12 8 19 8 5" fill="currentColor" stroke="none"/></svg>`;
 const SVG_PAUSE = `<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/></svg>`;
 
-// TODO 3 — 모듈 스코프 상태 변수
+// 모듈 스코프 상태 변수
 let choiceHighlight = 0;
 let pendingStageIdx = 0;
 let countdownStart = 0;
@@ -270,7 +270,7 @@ function init() {
   lastTurnAt = -Infinity;
   yawnAt = -Infinity;
   bulges.length = 0;
-  // TODO 5 — reset hint state
+  // reset hint state
   hintDismissed = false;
   hintReadyAt = performance.now();
   hintFadeOutStart = 0;
@@ -307,7 +307,7 @@ function loadStage(idx) {
   tickAccum = 0;
   fruitMoveAccum = 0; // v0.6.0 — reset moving-fruit drift timer per stage
   bulges.length = 0;
-  // TODO 5 — reset hint state on stage load
+  // reset hint state on stage load
   hintDismissed = false;
   hintReadyAt = performance.now();
   hintFadeOutStart = 0;
@@ -347,9 +347,7 @@ function spawnFood() {
   return true;
 }
 
-// v0.6.0 — (re)fill the board to stageSpawnCount() fruits. Clears existing fruit first,
-// then spawns up to spawnCount on distinct empty cells. If the board lacks enough empty
-// cells, spawns as many as fit and skips the rest (no infinite loop).
+// v0.6.0 — refill to spawnCount fruits on distinct empty cells (stops if the board is full).
 function placeFood() {
   foods = [];
   const want = stageSpawnCount();
@@ -408,9 +406,7 @@ function pause() {
   updateAuxButton();
 }
 
-// v0.6.2 (#22) — leaving the page (tab switch, app to background, screen off) must
-// never cost a life. Called on `visibilitychange` → hidden and from the Android
-// shell's onPause (window.SnakeHost.onPause). Idempotent; no-op outside timed states.
+// v0.6.2 (#22) — leaving the page never costs a life (visibilitychange / SnakeHost.onPause).
 function suspendGame() {
   // The 800 ms clear hold would expire while away and auto-start the next stage on
   // return — advance now so the player comes back to a paused, fresh stage instead.
@@ -497,7 +493,7 @@ function enterBlocked() {
   updateAuxButton();
 }
 
-// TODO 6 — CHOICE 진입/이탈 함수
+// CHOICE 진입/이탈 함수
 function enterChoice() {
   state = STATE.CHOICE;
   choiceHighlight = 0;
@@ -572,18 +568,9 @@ function tick() {
   }
 
   snake.unshift(head);
-  // v0.6.0 — multi-fruit eat: find the first fruit on the head cell (at most one per
-  // tick — even if two fruits share the head cell, only one is eaten; the rest wait
-  // for the next tick, keeping the bulge/growth +1 invariant). Eating effects remain
-  // the sole responsibility of tick() (planner risk #3): fruit drift never eats/grows.
+  // At most one fruit eaten per tick (v0.6.0); fruit drift never eats.
   let eatIdx = foods.findIndex((f) => f.x === head.x && f.y === head.y);
-  // v0.6.1 — pass-through eat fix. Moving fruit drifts on its own timer while the head
-  // ticks 4× faster, so a fruit moving toward the head can swap cells with it (head
-  // takes the fruit's old cell as the fruit takes the head's) and they never share a
-  // cell at a tick boundary — the fruit slips behind the head and, being slower, can
-  // never catch up, becoming uneatable. Treat a fruit on the head's just-vacated cell
-  // (prevHead) as eaten too: that fruit met the head's path this tick. Harmless on
-  // non-moving stages (spawnFood never places a fruit on an occupied body cell).
+  // v0.6.1 — a fruit swapping cells with the head counts as eaten (pass-through fix).
   if (eatIdx === -1) {
     eatIdx = foods.findIndex((f) => f.x === prevHead.x && f.y === prevHead.y);
   }
@@ -596,20 +583,13 @@ function tick() {
     tongueFlickAt = eatStart; // v0.5.9 — fire a one-shot tongue flick on eat
     // v0.6.1 — Android shell haptic bridge (no-op in a plain browser).
     if (typeof Android !== "undefined" && Android.vibrate) Android.vibrate(20);
-    // v0.5.7.2 (Issue #14): eating grows the snake (unshift without pop), so every
-    // existing segment index shifts +1. Bulge progress lives in index space, so
-    // shift each existing bulge +1 to keep tracking the same absolute segment
-    // (prevents the digestion lump from jumping a cell). spawnLen +1 too: the snake
-    // is one segment longer, and it keeps the updateBulges fade trigger
-    // (progress >= spawnLen - 1) from firing prematurely.
+    // v0.5.7.2 (#14) — growth shifts index-space bulges +1.
     for (let bi = 0; bi < bulges.length; bi++) {
       bulges[bi].progress += 1;
       bulges[bi].spawnLen += 1;
     }
     spawnBulge();
-    // Clear judged on cumulative applesEaten (Set D). On clear, skip respawn — the
-    // stage transitions immediately so a fresh fruit would be a ghost (planner risk #3).
-    // v0.7.0 (#50) — fillBoard stages clear when the snake covers every cell.
+    // Clear on apples (Set D) or, on fillBoard stages, a full board; no respawn on clear.
     if (stage.fillBoard ? snake.length >= stage.cols * stage.rows
       : stage.clearAfterApples != null && applesEaten >= stage.clearAfterApples) {
       return enterStageClear();
@@ -625,11 +605,7 @@ function tick() {
 // so fruit creeps noticeably slower than the snake (Open Q resolved: tick*4).
 function fruitMoveMs() { return stage.tick * 4; }
 
-// v0.6.0 — advance moving fruit one grid step toward the head (greedy Manhattan, 1 axis).
-// PLAYING-only (gated by caller). px/py snapshot the pre-move cell for render interp.
-// IMPORTANT: this only changes fruit *position* — never eats/grows/scores. If a fruit
-// drifts onto a stationary head, the eat is consumed by the next tick()'s eat path
-// (≤1 tick delay, imperceptible), preserving the v0.5.8 prevSnake invariant.
+// v0.6.0 — moving fruit: one greedy step toward the head; never eats (see tick).
 function moveFruits() {
   const head = snake[0];
   for (const f of foods) {
@@ -660,12 +636,7 @@ function getStageOffset() {
   };
 }
 
-// v0.6.4 (#45) — the body is one path through cell centers whose corners are quarter
-// arcs (radius ½ cell). Path param u: cell k of the chain sits at u = k (0 = head
-// cell), its edges at k ± ½. Only the two ends slide by renderT, so the body glides
-// along the curve instead of each segment lerping straight across a corner (v0.5.8).
-// Chain = snake (+ the cell the tail is leaving), stored from index 1; [0] is the cell
-// ahead of the head, [m+2] the cell behind the tail. Reused buffers (no per-frame alloc).
+// v0.6.4 (#45) — rounded body path (STYLE.md v0.6.4). Chain cells from index 1; reused buffers.
 let chX = new Int16Array(64);
 let chY = new Int16Array(64);
 let chR = new Float32Array(64); // per-cell corner radius in cells, 0 = straight
@@ -707,9 +678,7 @@ function buildPath() {
   } else {
     chX[m + 2] = 2 * lx - chX[m]; chY[m + 2] = 2 * ly - chY[m];
   }
-  // Ahead of the head: a pending ±90° turn (nextDir) bends the head cell, blended in
-  // from the moment it was pressed (pathBeta 0→1, done by the tick or after
-  // TOKEN.bendMinTicks for a late press) so the head never jumps. Otherwise straight.
+  // A pending turn bends the head cell in over pathBeta (bendMinTicks for late presses).
   const dx = chX[1] - chX[2], dy = chY[1] - chY[2];
   const turn = nextDir.x * dx + nextDir.y * dy === 0;
   chX[0] = chX[1] + (turn ? nextDir.x : dx);
@@ -750,10 +719,7 @@ function cornerAt(k) {
   return (ix || iy) !== 0 && (ox || oy) !== 0 && ix * ox + iy * oy === 0;
 }
 
-// How far corner k's center sits inside the drawn range: 0 at the very end, 1 once it
-// is half a cell in. A corner pulls its neighbour's radius back toward ½ in proportion,
-// so no radius jumps when a corner appears at the head or leaves at the tail, and a
-// pair that still sums over 1 only overlaps outside [pathUH, pathUT].
+// Corner k's weight inside the drawn range (0..1) — eases the adjacent-corner clamp.
 function cornerW(k) {
   if (k < 0 || k > chM || chR[k] <= 0) return 0;
   const w = 2 - 2 * Math.max(k - pathUT, pathUH - k);
@@ -857,14 +823,7 @@ function bulgeU(progress) {
   return Math.min(pathUT, Math.max(pathUH, progress + pathOff));
 }
 
-// v0.6.4 (#45) — the digestion lump is the body outline itself swelling: per bulge, 13
-// circles along the path whose radius rises from the body half-width to a cos² peak,
-// filled in the body's own shadow/green passes (one path per pass, so no alpha build-
-// up) — one bulging tube that follows corners. The fruit shows through as a bulgeFill
-// ellipse. Along the way (frac 0→1) the swell flattens and the fruit shrinks and fades;
-// at the tail both settle out over bulgeFadeMs. Wiggle (v0.5.9 tokens) sways the lump.
-// v0.6.5 (#47) — circles computed once per frame for both passes; 13 per lump for 1–2
-// lumps, 9 for 3–4, 7 for 5+ (same cos² profile, coarser).
+// Digestion lump = the body outline swelling (spec v0.6.4, STYLE.md Set B; circle tiers #47).
 const BS = { u: 0, swell: 0, size: 1, alpha: 1, wig: 0 };
 const swX = new Float64Array(BULGE_MAX * 13);
 const swY = new Float64Array(BULGE_MAX * 13);
@@ -1143,13 +1102,13 @@ function drawApple(cellX, cellY, now, phase = 0) {
   ctx.fill();
 }
 
-// TODO 5 — dismissHint
+// dismissHint
 function dismissHint() {
   if (hintDismissed) return;
   if (hintFadeOutStart === 0) hintFadeOutStart = performance.now();
 }
 
-// TODO 5 — drawTouchHint: shown only in STATE.READY, with fade-in/out
+// drawTouchHint: shown only in STATE.READY, with fade-in/out
 function drawTouchHint(now) {
   if (state !== STATE.READY) return;
   if (hintDismissed) return;
@@ -1187,7 +1146,7 @@ function drawTouchHint(now) {
   ctx.restore();
 }
 
-// TODO 12 — drawCountdown: overlaid on top of the pre-rendered board
+// drawCountdown: overlaid on top of the pre-rendered board
 function drawCountdown(now) {
   const elapsed = now - countdownStart;
 
@@ -1256,9 +1215,7 @@ function drawCountdown(now) {
 // draw order: background → apple → body → bulges → head → touch hint → countdown
 function draw(now) {
   drawBackground();
-  // v0.6.0 — multi-fruit: draw each fruit (drawApple reused, no new asset/color).
-  // Moving fruit lerps prev cell (px/py) → current cell (x/y) by fruitMoveAccum/stepMs,
-  // PLAYING only; otherwise pinned to the grid cell (v0.5.8 PLAYING-gating convention).
+  // v0.6.0 — fruits; moving ones lerp px/py → x/y while PLAYING.
   const interp = (state === STATE.PLAYING && stageFruitMoves())
     ? Math.min(1, Math.max(0, fruitMoveAccum / fruitMoveMs()))
     : 1;
@@ -1273,14 +1230,11 @@ function draw(now) {
   drawBulges(now);
   drawSnakeHead(now);
   drawTouchHint(now);
-  // TODO 12 — draw countdown overlay
+  // draw countdown overlay
   if (state === STATE.COUNTDOWN) drawCountdown(now);
 }
 
-// v0.6.2 (#22) — upper bound on one frame's simulated time. Browsers stop rAF while a
-// page is hidden, so the first frame back can carry seconds of backlog; replaying it
-// would run dozens of ticks in one frame (instant wall hit). Long gaps are dropped —
-// the game simply resumes. 250 ms ≈ 1–2 ticks, so a merely slow frame still catches up.
+// v0.6.2 (#22) — cap one frame's simulated time (long gaps after hidden are dropped).
 const MAX_FRAME_DT = 250;
 
 // frame: call updateBulges before draw
@@ -1316,9 +1270,7 @@ function frame(now) {
       tickAccum -= stage.tick;
       if (state !== STATE.PLAYING) break;
     }
-    // v0.6.0 — moving-fruit drift: separate dt accumulator, PLAYING only. One greedy
-    // grid step per fruitMoveMs(). Skip entirely on non-moving stages so fruitMoveAccum
-    // does not build up. Guard state again (tick() above may have left PLAYING).
+    // v0.6.0 — moving-fruit drift timer, PLAYING + moving stages only.
     if (state === STATE.PLAYING && stageFruitMoves()) {
       fruitMoveAccum += dt;
       const stepMs = fruitMoveMs();
@@ -1334,17 +1286,14 @@ function frame(now) {
       advanceStage();
     }
   } else if (state === STATE.COUNTDOWN) {
-    // TODO 11 — countdown RAF tick
+    // countdown RAF tick
     const elapsed = now - countdownStart;
     if (elapsed >= 3 * TOKEN.countdownTotalPerNum) {
       finishCountdown();
     }
   }
 
-  // v0.5.8 — tween progress from the *residual* tickAccum (post-consume, so multi-
-  // tick frames don't jump), clamped to [0,1] (no overshoot on slow frames). Gated
-  // on PLAYING only: every other state renders at t=0, pinning the snake to its grid
-  // cell (no drifting into walls while stopped). Doesn't rely on tickAccum being 0.
+  // v0.5.8 — render tween from residual tickAccum, PLAYING only.
   renderT = state === STATE.PLAYING
     ? Math.min(1, Math.max(0, tickAccum / stage.tick))
     : 0;
@@ -1355,7 +1304,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// TODO 1 — setDirection: 180° guard removed
+// setDirection: 180° guard removed
 function setDirection(dx, dy) {
   nextDir = { x: dx, y: dy };
 }
@@ -1371,11 +1320,11 @@ function tryUnblock(dx, dy) {
   updateAuxButton();
 }
 
-// TODO 1 — rotateLeft / rotateRight helpers
+// rotateLeft / rotateRight helpers
 function rotateLeft(d)  { return { x:  d.y, y: -d.x }; }
 function rotateRight(d) { return { x: -d.y, y:  d.x }; }
 
-// TODO 1 — applyTurn: wraps rotation logic for keyboard, canvas click, and buttons
+// applyTurn: wraps rotation logic for keyboard, canvas click, and buttons
 function applyTurn(rot) {
   const base = nextDir || dir;
   const r = rot(base);
@@ -1384,7 +1333,7 @@ function applyTurn(rot) {
   dismissHint();
 }
 
-// TODO 7 — auxAction: rewritten for v0.5.6
+// auxAction: rewritten for v0.5.6
 function auxAction() {
   if (state === STATE.PLAYING) pause();
   else if (state === STATE.PAUSED) { state = STATE.PLAYING; hideOverlay(); updateAuxButton(); }
@@ -1397,7 +1346,7 @@ function auxAction() {
   dismissHint();
 }
 
-// TODO 13 — updateAuxButton: CHOICE/COUNTDOWN show SVG_PLAY
+// updateAuxButton: CHOICE/COUNTDOWN show SVG_PLAY
 function updateAuxButton() {
   if (!btnAux) return;
   if (state === STATE.PLAYING) {
@@ -1409,7 +1358,7 @@ function updateAuxButton() {
   }
 }
 
-// TODO 8 — keydown handler with CHOICE/COUNTDOWN branches
+// keydown handler with CHOICE/COUNTDOWN branches
 document.addEventListener("keydown", (e) => {
   const key = e.key;
 
@@ -1461,7 +1410,7 @@ document.addEventListener("keydown", (e) => {
   // ↑ ↓ W S — ignored (fall-through, no action)
 });
 
-// TODO 9 — canvas pointerdown with CHOICE/COUNTDOWN branches at top
+// canvas pointerdown with CHOICE/COUNTDOWN branches at top
 canvas.addEventListener("pointerdown", (e) => {
   if (state === STATE.HELP) return;
   if (state === STATE.CHOICE) return;
@@ -1475,7 +1424,7 @@ canvas.addEventListener("pointerdown", (e) => {
   applyTurn(pixelX < rect.width / 2 ? rotateLeft : rotateRight);
 });
 
-// TODO 7 — mobile button wiring
+// mobile button wiring
 if (btnRotLeft) {
   btnRotLeft.addEventListener("pointerdown", (e) => { e.preventDefault(); if (state === STATE.HELP) return; applyTurn(rotateLeft); });
 }
@@ -1486,7 +1435,7 @@ if (btnAux) {
   btnAux.addEventListener("pointerdown", (e) => { e.preventDefault(); if (state === STATE.HELP) return; auxAction(); });
 }
 
-// TODO 10 — choice button wiring
+// choice button wiring
 btnChoiceTutorial.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(0); });
 btnChoiceSkip.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(1); });
 btnChoiceFill.addEventListener("pointerdown", (e) => { e.preventDefault(); confirmChoice(2); });
@@ -1496,16 +1445,11 @@ if (btnHelpClose) {
   btnHelpClose.addEventListener("click", () => closeHelp());
 }
 if (btnHelpOpen) {
-  // v0.6.2 (#34) — closing help returns to the state it was opened from. The link sits in
-  // the overlay, so it is reachable from READY, CHOICE, PAUSED, OVER, BLOCKED and
-  // STAGE_CLEAR; a hard-coded CHOICE left the choice buttons hidden after READY/PAUSED/
-  // OVER/BLOCKED, and CHOICE ignores every tap, so touch players could not start.
+  // v0.6.2 (#34) — help returns to the state it was opened from.
   btnHelpOpen.addEventListener("click", () => {
     // Never record HELP as its own return state — closeHelp() would restore HELP forever.
     if (state === STATE.HELP) return;
-    // STAGE_CLEAR is an 800 ms hold that does not tick while HELP is up, so returning to
-    // it would find the hold long expired and drop the player straight into play. Settle
-    // it the way suspendGame() does: advance now and come back to a paused, fresh stage.
+    // STAGE_CLEAR would expire under help: settle it like suspendGame().
     if (state === STATE.STAGE_CLEAR) { advanceStage(); pause(); }
     openHelp(state);
   });
